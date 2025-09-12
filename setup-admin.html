@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCMIS Admin Setup</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2563eb;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #2563eb;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #1d4ed8;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+        .error {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+        .info {
+            background-color: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏥 CCMIS Admin Setup</h1>
+        <p>Create the initial super admin user for the Chronic Care Management Information System.</p>
+        
+        <form id="adminForm">
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" value="admin@ccmis.org" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" value="admin123" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="hospitalName">Hospital Name:</label>
+                <input type="text" id="hospitalName" value="BPRM FHI Taraba State" required>
+            </div>
+            
+            <button type="submit">Create Admin User</button>
+        </form>
+        
+        <div id="status" class="status"></div>
+        
+        <div style="margin-top: 30px; padding: 20px; background-color: #f8fafc; border-radius: 4px;">
+            <h3>📋 Instructions:</h3>
+            <ol>
+                <li>Click "Create Admin User" to set up the initial admin</li>
+                <li>This will create a Firebase user and corresponding Firestore document</li>
+                <li>You can then login to the main application</li>
+                <li>Default credentials: admin@ccmis.org / admin123</li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, doc, setDoc, collection, addDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBIpsUza1YMuSItpyZGbM20hdpYTu9hZeQ",
+            authDomain: "ccmis-f6008.firebaseapp.com",
+            projectId: "ccmis-f6008",
+            storageBucket: "ccmis-f6008.firebasestorage.app",
+            messagingSenderId: "543699819306",
+            appId: "1:543699819306:web:cf9f7f7a34fd4e01a2dc53",
+            measurementId: "G-12SFGZC2Z6"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        document.getElementById('adminForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const hospitalName = document.getElementById('hospitalName').value;
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                statusDiv.className = 'status info';
+                statusDiv.style.display = 'block';
+                statusDiv.textContent = 'Creating admin user...';
+                
+                // Create Firebase user
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+                
+                // Create user document in Firestore
+                await setDoc(doc(db, 'users', user.uid), {
+                    id: user.uid,
+                    username: 'admin',
+                    email: email,
+                    role: 'SUPER_ADMIN',
+                    hospitalId: null,
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+                
+                // Create hospital document
+                const hospitalRef = await addDoc(collection(db, 'hospitals'), {
+                    name: hospitalName,
+                    address: 'Taraba State, Nigeria',
+                    lga: 'Jalingo',
+                    state: 'Taraba',
+                    phoneNumber: '+234-xxx-xxx-xxxx',
+                    email: 'info@bprm-fhi-taraba.org',
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+                
+                statusDiv.className = 'status success';
+                statusDiv.innerHTML = `
+                    ✅ Admin user created successfully!<br>
+                    📧 Email: ${email}<br>
+                    🏥 Hospital: ${hospitalName}<br>
+                    🔗 <a href="https://ccmis-f6008.web.app" target="_blank">Go to CCMIS Application</a>
+                `;
+                
+            } catch (error) {
+                console.error('Error:', error);
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `❌ Error: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>

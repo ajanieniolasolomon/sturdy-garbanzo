@@ -1,0 +1,646 @@
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  type User as FirebaseUser
+} from 'firebase/auth';
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+  getDocs,
+  serverTimestamp,
+  enableNetwork,
+  disableNetwork,
+  onSnapshot
+} from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
+import { offlineService } from './offlineService';
+import type {
+  User,
+  Hospital,
+  Patient,
+  Consultation,
+  Task,
+  ApiResponse,
+  LoginForm,
+  PatientForm,
+  UserForm,
+  HospitalForm,
+  ConsultationForm,
+  TaskForm
+} from '../types';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
+class FirebaseService {
+  private syncQueue: any[] = [];
+  private listeners: { [key: string]: () => void } = {};
+
+  constructor() {
+    // Listen for online/offline status
+    window.addEventListener('online', () => {
+      this.syncPendingChanges();
+    });
+  }
+
+  // Authentication methods
+  async login(credentials: LoginForm): Promise<User> {
+    try {
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        credentials.email,
+        credentials.password
+      );
+
+      // Get user data from Firestore
+      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      if (!userDoc.exists()) {
+        throw new Error('User data not found');
+      }
+
+      const userData = userDoc.data() as User;
+      return { ...userData, id: userCredential.user.uid };
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
+  }
+
+  async logout(): Promise<void> {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout error:', error);
+      throw error;
+    }
+  }
+
+  onAuthStateChanged(callback: (user: User | null) => void): () => void {
+    return onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        try {
+          // First, try to get the user document
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data() as User;
+            callback({ ...userData, id: firebaseUser.uid });
+          } else {
+            console.warn('User document not found for:', firebaseUser.email);
+            callback(null);
+          }
+        } catch (error: any) {
+          console.error('Auth state change error:', error);
+          // If there's a permissions error, it might be because claims aren't set up yet
+          // Let's try to create a basic user object from Firebase Auth data
+          if ((error as any).code === 'permission-denied' || (error as any).message?.includes('Missing or insufficient permissions')) {
+            console.warn('Permissions error - user may need claims setup. Creating basic user object.');
+            // Create a minimal user object from Firebase Auth data
+            const basicUser: User = {
+              id: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              fullName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Unknown User',
+              username: firebaseUser.email?.split('@')[0] || 'unknown',
+              role: 'HCW', // Default role
+              hospitalId: undefined as string | undefined,
+              isActive: true,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+            callback(basicUser);
+          } else {
+            callback(null);
+          }
+        }
+      } else {
+        callback(null);
+      }
+    });
+  }
+
+  // Hospital methods
+  streamHospitals(callback: (response: ApiResponse<Hospital>) => void): () => void {
+    const q = query(
+      collection(db, 'hospitals'),
+      where('isActive', '==', true),
+      orderBy('createdAt', 'desc')
+    );
+    return onSnapshot(q, (snapshot) => {
+      const hospitals = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Hospital[];
+      callback({ data: hospitals, total: hospitals.length, success: true });
+    });
+  }
+  async getHospitals(): Promise<ApiResponse<Hospital>> {
+    try {
+      const q = query(
+        collection(db, 'hospitals'),
+        where('isActive', '==', true),
+        orderBy('createdAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      const hospitals = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Hospital[];
+      
+      return { data: hospitals, total: hospitals.length, success: true };
+    } catch (error) {
+      console.error('Get hospitals error:', error);
+      throw error;
+    }
+  }
+
+  async createHospital(hospitalData: HospitalForm): Promise<Hospital> {
+    try {
+      const newHospital: Omit<Hospital, 'id'> = {
+        ...hospitalData,
+        capacity: typeof hospitalData.capacity === 'string' ? parseInt(hospitalData.capacity) || 0 : hospitalData.capacity,
+        isActive: true,
+        createdAt: serverTimestamp() as any,
+        updatedAt: serverTimestamp() as any,
+      };
+      
+      const docRef = doc(collection(db, 'hospitals'));
+      const docId = docRef.id;
+      await offlineService.createDocument('hospitals', docId, newHospital);
+      
+      return {
+        id: docId,
+        ...newHospital,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as Hospital;
+    } catch (error) {
+      console.error('Create hospital error:', error);
+      throw error;
+    }
+  }
+
+  async updateHospital(id: string, hospitalData: Partial<HospitalForm>): Promise<void> {
+    try {
+      await offlineService.updateDocument('hospitals', id, {
+        ...hospitalData,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Update hospital error:', error);
+      throw error;
+    }
+  }
+
+  async deleteHospital(id: string): Promise<void> {
+    try {
+      await offlineService.updateDocument('hospitals', id, {
+        isActive: false,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Delete hospital error:', error);
+      throw error;
+    }
+  }
+
+  // Patient methods
+  async getPatients(hospitalId?: string, assignedHCW?: string): Promise<ApiResponse<Patient>> {
+    try {
+      let q = query(
+        collection(db, 'patients'),
+        where('isActive', '==', true),
+        orderBy('createdAt', 'desc')
+      );
+      
+      if (hospitalId) {
+        q = query(q, where('hospitalId', '==', hospitalId));
+      }
+      if (assignedHCW) {
+        q = query(q, where('assignedHCW', '==', assignedHCW));
+      }
+      
+      const querySnapshot = await getDocs(q);
+      const patients = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Patient[];
+      
+      return { data: patients, total: patients.length, success: true };
+    } catch (error) {
+      console.error('Get patients error:', error);
+      throw error;
+    }
+  }
+
+  streamPatients(
+    hospitalId: string | undefined,
+    callback: (response: ApiResponse<Patient>) => void
+  ): () => void {
+    let qRef = query(
+      collection(db, 'patients'),
+      where('isActive', '==', true),
+      orderBy('createdAt', 'desc')
+    );
+    if (hospitalId) {
+      qRef = query(qRef, where('hospitalId', '==', hospitalId));
+    }
+    return onSnapshot(qRef, (snapshot) => {
+      const patients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Patient[];
+      callback({ data: patients, total: patients.length, success: true });
+    });
+  }
+
+  async createPatient(patientData: PatientForm & { hospitalId: string }, userId?: string) {
+
+  //  console.log("Creating patient with data:", patientData, "by user:", userId);
+    try {
+      const newPatient: Omit<Patient, 'id'> = {
+        ...patientData,
+        age: typeof patientData.age === 'string' ? parseInt(patientData.age) || 0 : patientData.age,
+        isActive: true,
+        createdAt: serverTimestamp() as any,
+        updatedAt: serverTimestamp() as any,
+      };
+      
+      const docRef = doc(collection(db, 'patients'));
+      const docId = docRef.id;
+      
+      // Use offline service for offline-aware creation with user context
+      await offlineService.createDocument('patients', docId, newPatient, userId);
+      
+      return {
+        id: docId,
+        ...newPatient,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as Patient;
+    } catch (error) {
+      console.error('Create patient error:', error);
+      throw error;
+    }
+  }
+
+  async updatePatient(id: string, patientData: Partial<PatientForm>, userId?: string): Promise<void> {
+    try {
+      // Use offline service for offline-aware updates with user context
+      await offlineService.updateDocument('patients', id, {
+        ...patientData,
+        updatedAt: serverTimestamp()
+      }, userId);
+    } catch (error) {
+      console.error('Update patient error:', error);
+      throw error;
+    }
+  }
+
+  async deletePatient(id: string, userId?: string): Promise<void> {
+    try {
+      // Use offline service for offline-aware soft delete with user context
+      await offlineService.updateDocument('patients', id, {
+        isActive: false,
+        updatedAt: serverTimestamp()
+      }, userId);
+    } catch (error) {
+      console.error('Delete patient error:', error);
+      throw error;
+    }
+  }
+
+  // User methods
+  async getUsers(hospitalId?: string): Promise<ApiResponse<User>> {
+    try {
+      let q = query(
+        collection(db, 'users'),
+        where('isActive', '==', true),
+        orderBy('createdAt', 'desc')
+      );
+      
+      if (hospitalId) {
+        q = query(q, where('hospitalId', '==', hospitalId));
+      }
+      
+      const querySnapshot = await getDocs(q);
+      const users = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as User[];
+      
+      return { data: users, total: users.length, success: true };
+    } catch (error) {
+      console.error('Get users error:', error);
+      throw error;
+    }
+  }
+
+  streamUsers(
+    hospitalId: string | undefined,
+    callback: (response: ApiResponse<User>) => void
+  ): () => void {
+    let qRef = query(
+      collection(db, 'users'),
+      where('isActive', '==', true),
+      orderBy('createdAt', 'desc')
+    );
+    if (hospitalId) {
+      qRef = query(qRef, where('hospitalId', '==', hospitalId));
+    }
+    return onSnapshot(qRef, (snapshot) => {
+      const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as User[];
+      callback({ data: users, total: users.length, success: true });
+    });
+  }
+
+  async createUser(userData: UserForm & { hospitalId?: string }) {
+
+     try {
+    const functions = getFunctions();
+    const createUserFn = httpsCallable(functions, "createUser");
+
+    const result = await createUserFn(userData);
+
+    console.log("✅ User created via Cloud Function:", result.data);
+    return result.data;
+  } catch (error) {
+    console.error("❌ Error creating user:", error);
+    throw error;
+  }
+
+  }
+
+  async updateUser(id: string, userData: Partial<UserForm>): Promise<void> {
+    try {
+      await offlineService.updateDocument('users', id, {
+        ...userData,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Update user error:', error);
+      throw error;
+    }
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    try {
+      await offlineService.updateDocument('users', id, {
+        isActive: false,
+        updatedAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Delete user error:', error);
+      throw error;
+    }
+  }
+
+  // Consultation methods
+  async getConsultations(patientId?: string, hospitalId?: string, hcwId?: string): Promise<ApiResponse<Consultation>> {
+    try {
+      let q = query(
+        collection(db, 'consultations'),
+        where('isActive', '==', true),
+        orderBy('consultationDate', 'desc')
+      );
+      
+      if (patientId) {
+        q = query(q, where('patientId', '==', patientId));
+      }
+      
+      if (hospitalId) {
+        q = query(q, where('hospitalId', '==', hospitalId));
+      }
+      if (hcwId) {
+        q = query(q, where('hcwId', '==', hcwId));
+      }
+      
+      const querySnapshot = await getDocs(q);
+      const consultations = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Consultation[];
+      
+      return { data: consultations, total: consultations.length, success: true };
+    } catch (error) {
+      console.error('Get consultations error:', error);
+      throw error;
+    }
+  }
+
+  streamConsultations(
+    patientId: string | undefined,
+    hospitalId: string | undefined,
+    callback: (response: ApiResponse<Consultation>) => void
+  ): () => void {
+    let qRef = query(
+      collection(db, 'consultations'),
+      where('isActive', '==', true),
+      orderBy('consultationDate', 'desc')
+    );
+    if (patientId) {
+      qRef = query(qRef, where('patientId', '==', patientId));
+    }
+    if (hospitalId) {
+      qRef = query(qRef, where('hospitalId', '==', hospitalId));
+    }
+    return onSnapshot(qRef, (snapshot) => {
+      const consultations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Consultation[];
+      callback({ data: consultations, total: consultations.length, success: true });
+    });
+  }
+
+  async createConsultation(consultationData: ConsultationForm & { 
+    patientName: string; 
+    hcwId: string; 
+    hcwName: string; 
+    hospitalId: string; 
+  }, userId?: string): Promise<Consultation> {
+    try {
+      const newConsultation: Omit<Consultation, 'id'> = {
+        ...consultationData,
+        isActive: true,
+        createdAt: serverTimestamp() as any,
+        updatedAt: serverTimestamp() as any,
+      };
+      
+      const docRef = doc(collection(db, 'consultations'));
+      const docId = docRef.id;
+      await offlineService.createDocument('consultations', docId, newConsultation, userId);
+      
+      return {
+        id: docId,
+        ...newConsultation,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as Consultation;
+    } catch (error) {
+      console.error('Create consultation error:', error);
+      throw error;
+    }
+  }
+
+  async updateConsultation(id: string, consultationData: Partial<ConsultationForm>, userId?: string): Promise<void> {
+    try {
+      await offlineService.updateDocument('consultations', id, {
+        ...consultationData,
+        updatedAt: serverTimestamp()
+      }, userId);
+    } catch (error) {
+      console.error('Update consultation error:', error);
+      throw error;
+    }
+  }
+
+  async deleteConsultation(id: string, userId?: string): Promise<void> {
+    try {
+      await offlineService.updateDocument('consultations', id, {
+        isActive: false,
+        updatedAt: serverTimestamp()
+      }, userId);
+    } catch (error) {
+      console.error('Delete consultation error:', error);
+      throw error;
+    }
+  }
+
+  // Task methods
+  async getTasks(hospitalId?: string, assignedTo?: string, status?: string): Promise<ApiResponse<Task>> {
+    try {
+      let q = query(
+        collection(db, 'tasks'),
+        where('isActive', '==', true),
+        orderBy('dueDate', 'asc')
+      );
+      
+      if (hospitalId) {
+        q = query(q, where('hospitalId', '==', hospitalId));
+      }
+      
+      if (assignedTo) {
+        q = query(q, where('assignedTo', '==', assignedTo));
+      }
+      
+      if (status) {
+        q = query(q, where('status', '==', status));
+      }
+      
+      const querySnapshot = await getDocs(q);
+      const tasks = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Task[];
+      
+      return { data: tasks, total: tasks.length, success: true };
+    } catch (error) {
+      console.error('Get tasks error:', error);
+      throw error;
+    }
+  }
+
+  streamTasks(
+    hospitalId: string | undefined,
+    assignedTo: string | undefined,
+    status: string | undefined,
+    callback: (response: ApiResponse<Task>) => void
+  ): () => void {
+    let qRef = query(
+      collection(db, 'tasks'),
+      where('isActive', '==', true),
+      orderBy('dueDate', 'asc')
+    );
+    if (hospitalId) {
+      qRef = query(qRef, where('hospitalId', '==', hospitalId));
+    }
+    if (assignedTo) {
+      qRef = query(qRef, where('assignedTo', '==', assignedTo));
+    }
+    if (status) {
+      qRef = query(qRef, where('status', '==', status));
+    }
+    return onSnapshot(qRef, (snapshot) => {
+      const tasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Task[];
+      callback({ data: tasks, total: tasks.length, success: true });
+    });
+  }
+
+  async createTask(taskData: TaskForm & { 
+    assignedToName: string; 
+    hospitalId: string; 
+    patientName?: string; 
+  }, userId?: string): Promise<Task> {
+    try {
+      const newTask: Omit<Task, 'id'> = {
+        ...taskData,
+        isActive: true,
+        status: 'pending',
+        createdAt: serverTimestamp() as any,
+        updatedAt: serverTimestamp() as any,
+      };
+      
+      const docRef = doc(collection(db, 'tasks'));
+      const docId = docRef.id;
+      await offlineService.createDocument('tasks', docId, newTask, userId);
+      
+      return {
+        id: docId,
+        ...newTask,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } as Task;
+    } catch (error) {
+      console.error('Create task error:', error);
+      throw error;
+    }
+  }
+
+  async updateTask(id: string, taskData: Partial<TaskForm & { assignedToName?: string }>, userId?: string): Promise<void> {
+    try {
+      await offlineService.updateDocument('tasks', id, {
+        ...taskData,
+        updatedAt: serverTimestamp()
+      }, userId);
+    } catch (error) {
+      console.error('Update task error:', error);
+      throw error;
+    }
+  }
+
+  async deleteTask(id: string, userId?: string): Promise<void> {
+    try {
+      await offlineService.updateDocument('tasks', id, {
+        isActive: false,
+        updatedAt: serverTimestamp()
+      }, userId);
+    } catch (error) {
+      console.error('Delete task error:', error);
+      throw error;
+    }
+  }
+
+  // Offline/Online management
+  async enableOfflineMode(): Promise<void> {
+    await disableNetwork(db);
+  }
+
+  async enableOnlineMode(): Promise<void> {
+    await enableNetwork(db);
+    await this.syncPendingChanges();
+  }
+
+  private async syncPendingChanges(): Promise<void> {
+    if (this.syncQueue.length === 0) return;
+    
+    try {
+      // Process sync queue
+      this.syncQueue = [];
+    } catch (error) {
+      console.error('Sync error:', error);
+    }
+  }
+
+  // Cleanup
+  cleanup(): void {
+    Object.values(this.listeners).forEach(unsubscribe => unsubscribe());
+    this.listeners = {};
+  }
+}
+
+// Create singleton instance
+const firebaseService = new FirebaseService();
+export default firebaseService;

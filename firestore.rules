@@ -1,0 +1,81 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ==============================
+    // USERS COLLECTION
+    // ==============================
+    match /users/{userId} {
+      allow read, write: if isSuperAdmin()
+        || (isAdmin() && isSameHospital(resource.data.hospitalId))
+        || (isHCW() && isSameUser(userId));
+
+      // 👤 Only SUPER_ADMIN can create users
+      allow create: if isSuperAdmin();
+    }
+
+    // ==============================
+    // HOSPITALS COLLECTION
+    // ==============================
+    match /hospitals/{hospitalId} {
+      allow read, write: if isSuperAdmin()
+        || (isAdmin() && isSameHospital(hospitalId));
+      
+      // 🏥 Only SUPER_ADMIN can create hospitals
+      allow create: if isSuperAdmin();
+    }
+
+    // ==============================
+    // PATIENTS COLLECTION
+    // ==============================
+    match /patients/{patientId} {
+      allow read, write: if isSuperAdmin()
+        || (isAdmin() && isSameHospital(resource.data.hospitalId))
+        || (isHCW() && isSameHospital(resource.data.hospitalId));
+    }
+
+    // ==============================
+    // CONSULTATIONS COLLECTION
+    // ==============================
+    match /consultations/{consultationId} {
+      allow read, write: if isSuperAdmin()
+        || (isAdmin() && isSameHospital(resource.data.hospitalId))
+        || (isHCW() && isSameHospital(resource.data.hospitalId));
+    }
+
+    // ==============================
+    // TASKS COLLECTION
+    // ==============================
+    match /tasks/{taskId} {
+      allow read, write: if isSuperAdmin()
+        || (isAdmin() && isSameHospital(resource.data.hospitalId))
+        || (isHCW() && isSameHospital(resource.data.hospitalId));
+    }
+
+    // ==============================
+    // HELPER FUNCTIONS
+    // ==============================
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.role == "SUPER_ADMIN";
+    }
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.role == "ADMIN";
+    }
+
+    function isHCW() {
+      return request.auth != null && request.auth.token.role == "HCW";
+    }
+
+    // ✅ Compare hospitalId in claim vs document
+    function isSameHospital(hospitalId) {
+      return request.auth != null && request.auth.token.hospitalId == hospitalId;
+    }
+
+    // ✅ User can only read/write their own profile
+    function isSameUser(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

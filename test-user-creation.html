@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test User Creation Process</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        input { padding: 8px; margin: 5px; border: 1px solid #ccc; border-radius: 3px; width: 200px; }
+        .step { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Test User Creation Process</h1>
+    
+    <div class="step">
+        <h3>Step 1: Login as SUPER_ADMIN</h3>
+        <button onclick="loginAsSuperAdmin()">Login as SUPER_ADMIN</button>
+        <div id="loginResult"></div>
+    </div>
+
+    <div class="step">
+        <h3>Step 2: Test User Creation</h3>
+        <input type="email" id="newUserEmail" placeholder="New user email" value="testuser@example.com">
+        <input type="text" id="newUserPassword" placeholder="Password" value="TestPassword123!">
+        <input type="text" id="newUserFullName" placeholder="Full Name" value="Test User">
+        <input type="text" id="newUserRole" placeholder="Role" value="HCW">
+        <input type="text" id="newUserHospitalId" placeholder="Hospital ID (optional)">
+        <button onclick="testCreateUser()">Create Test User</button>
+        <div id="createResult"></div>
+    </div>
+
+    <div class="step">
+        <h3>Step 3: Verify User Claims</h3>
+        <button onclick="verifyUserClaims()">Verify Claims for Created User</button>
+        <div id="verifyResult"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
+        import { getFirestore, doc, setDoc, serverTimestamp, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBIpsUza1YMuSItpyZGbM20hdpYTu9hZeQ",
+            authDomain: "ccmis-f6008.firebaseapp.com",
+            projectId: "ccmis-f6008",
+            storageBucket: "ccmis-f6008.firebasestorage.app",
+            messagingSenderId: "543699819306",
+            appId: "1:543699819306:web:cf9f7f7a34fd4e01a2dc53"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const functions = getFunctions(app);
+        const db = getFirestore(app);
+
+        // Make functions available globally
+        window.auth = auth;
+        window.functions = functions;
+        window.db = db;
+        window.httpsCallable = httpsCallable;
+        window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+        window.updateProfile = updateProfile;
+        window.setDoc = setDoc;
+        window.doc = doc;
+        window.serverTimestamp = serverTimestamp;
+        window.getDoc = getDoc;
+
+        window.createdUserId = null;
+    </script>
+
+    <script>
+        async function loginAsSuperAdmin() {
+            const resultDiv = document.getElementById('loginResult');
+            try {
+                resultDiv.innerHTML = '<div class="info">🔄 Logging in as SUPER_ADMIN...</div>';
+                
+                const userCredential = await window.signInWithEmailAndPassword(window.auth, 'admin@ccmis.org', 'admin123');
+                const user = userCredential.user;
+                
+                // Get the ID token to check claims
+                const idTokenResult = await user.getIdTokenResult();
+                const claims = idTokenResult.claims;
+                
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        ✅ Logged in as SUPER_ADMIN<br>
+                        Email: ${user.email}<br>
+                        UID: ${user.uid}<br>
+                        Claims: ${JSON.stringify(claims, null, 2)}
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Login failed: ${error.message}</div>`;
+            }
+        }
+
+        async function testCreateUser() {
+            const email = document.getElementById('newUserEmail').value;
+            const password = document.getElementById('newUserPassword').value;
+            const fullName = document.getElementById('newUserFullName').value;
+            const role = document.getElementById('newUserRole').value;
+            const hospitalId = document.getElementById('newUserHospitalId').value;
+            const resultDiv = document.getElementById('createResult');
+
+            if (!email || !password || !fullName || !role) {
+                resultDiv.innerHTML = '<div class="error">❌ All fields are required</div>';
+                return;
+            }
+
+            try {
+                resultDiv.innerHTML = '<div class="info">🔄 Creating user...</div>';
+
+                // Step 1: Create Firebase Auth user
+                const userCredential = await window.createUserWithEmailAndPassword(window.auth, email, password);
+                const firebaseUser = userCredential.user;
+                window.createdUserId = firebaseUser.uid;
+
+                resultDiv.innerHTML += '<div class="info">✅ Step 1: Firebase Auth user created</div>';
+
+                // Step 2: Update display name
+                await window.updateProfile(firebaseUser, { displayName: fullName });
+                resultDiv.innerHTML += '<div class="info">✅ Step 2: Display name updated</div>';
+
+                // Step 3: Set custom claims
+                const setUserClaims = window.httpsCallable(window.functions, 'setUserClaims');
+                await setUserClaims({
+                    uid: firebaseUser.uid,
+                    role: role,
+                    hospitalId: hospitalId || null
+                });
+                resultDiv.innerHTML += '<div class="info">✅ Step 3: Custom claims set</div>';
+
+                // Step 4: Create Firestore document
+                const userData = {
+                    email: email,
+                    fullName: fullName,
+                    username: email.split('@')[0],
+                    role: role,
+                    hospitalId: hospitalId || undefined,
+                    isActive: true,
+                    createdAt: window.serverTimestamp(),
+                    updatedAt: window.serverTimestamp(),
+                };
+
+                await window.setDoc(window.doc(window.db, 'users', firebaseUser.uid), userData);
+                resultDiv.innerHTML += '<div class="info">✅ Step 4: Firestore document created</div>';
+
+                resultDiv.innerHTML += `
+                    <div class="success">
+                        🎉 User creation completed successfully!<br>
+                        UID: ${firebaseUser.uid}<br>
+                        Email: ${email}<br>
+                        Role: ${role}
+                    </div>
+                `;
+
+            } catch (error) {
+                resultDiv.innerHTML += `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        async function verifyUserClaims() {
+            const resultDiv = document.getElementById('verifyResult');
+            
+            if (!window.createdUserId) {
+                resultDiv.innerHTML = '<div class="error">❌ No user created yet. Please create a user first.</div>';
+                return;
+            }
+
+            try {
+                resultDiv.innerHTML = '<div class="info">🔄 Verifying user claims...</div>';
+
+                // Get the user document from Firestore
+                const userDoc = await window.getDoc(window.doc(window.db, 'users', window.createdUserId));
+                
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            ✅ User document found in Firestore:<br>
+                            ${JSON.stringify(userData, null, 2)}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ User document not found in Firestore</div>';
+                }
+
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Error verifying claims: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

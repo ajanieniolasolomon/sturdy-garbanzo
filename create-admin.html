@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Admin User</title>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js"></script>
+</head>
+<body>
+    <h1>Create Super Admin User</h1>
+    <button onclick="createAdmin()">Create Super Admin</button>
+    <div id="result"></div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBIpsUza1YMuSItpyZGbM20hdpYTu9hZeQ",
+            authDomain: "ccmis-f6008.firebaseapp.com",
+            projectId: "ccmis-f6008",
+            storageBucket: "ccmis-f6008.firebasestorage.app",
+            messagingSenderId: "543699819306",
+            appId: "1:543699819306:web:cf9f7f7a34fd4e01a2dc53"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        async function createAdmin() {
+            try {
+                // Create user in Firebase Auth
+                const userCredential = await auth.createUserWithEmailAndPassword('admin@ccmis.org', 'admin123');
+                const user = userCredential.user;
+
+                // Create user document in Firestore
+                await db.collection('users').doc(user.uid).set({
+                    username: 'admin',
+                    email: 'admin@ccmis.org',
+                    fullName: 'Super Admin',
+                    role: 'SUPER_ADMIN',
+                    isActive: true,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                document.getElementById('result').innerHTML = `
+                    <h2>Super Admin Created Successfully!</h2>
+                    <p>Email: admin@ccmis.org</p>
+                    <p>Password: admin123</p>
+                    <p>You can now login to the CCMIS system.</p>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h2>Error:</h2>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

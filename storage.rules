@@ -1,0 +1,25 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() { return request.auth != null; }
+    function userDoc() { return get(/databases/(default)/documents/users/$(request.auth.uid)); }
+    function hasRole(role) { return isSignedIn() && userDoc().data.role == role; }
+    function sameHospital(hId) { return isSignedIn() && userDoc().data.hospitalId == hId; }
+
+    // Path: uploads/{hospitalId}/{userId}/{filename}
+    match /uploads/{hospitalId}/{userId}/{fileName} {
+      allow read: if isSignedIn() && (hasRole('SUPER_ADMIN') || sameHospital(hospitalId));
+      allow write: if isSignedIn() && (
+        hasRole('SUPER_ADMIN') ||
+        (hasRole('ADMIN') && sameHospital(hospitalId)) ||
+        (request.auth.uid == userId && sameHospital(hospitalId))
+      );
+    }
+
+    // Deny everything else
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
+

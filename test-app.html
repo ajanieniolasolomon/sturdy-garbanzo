@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCMIS Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .result { margin-top: 10px; padding: 10px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>CCMIS Application Test</h1>
+    
+    <div class="test-section info">
+        <h3>🔗 Live Application Links</h3>
+        <p><strong>Main App:</strong> <a href="https://ccmis-f6008.web.app" target="_blank">https://ccmis-f6008.web.app</a></p>
+        <p><strong>Setup Page:</strong> <a href="https://ccmis-f6008.web.app/setup" target="_blank">https://ccmis-f6008.web.app/setup</a></p>
+        <p><strong>Firebase Console:</strong> <a href="https://console.firebase.google.com/project/ccmis-f6008/overview" target="_blank">https://console.firebase.google.com/project/ccmis-f6008/overview</a></p>
+    </div>
+
+    <div class="test-section">
+        <h3>🔐 Test Credentials</h3>
+        <p><strong>Super Admin:</strong></p>
+        <ul>
+            <li>Email: admin@ccmis.org</li>
+            <li>Password: admin123</li>
+        </ul>
+        <p><strong>Hospital Admin:</strong></p>
+        <ul>
+            <li>Email: admin@ruralhealthcenter.ng</li>
+            <li>Password: admin123</li>
+        </ul>
+        <p><strong>Healthcare Worker:</strong></p>
+        <ul>
+            <li>Email: nelson@ruralhealthcenter.ng</li>
+            <li>Password: hcw123</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h3>🧪 Manual Testing Checklist</h3>
+        <div id="test-results"></div>
+        
+        <h4>1. Authentication Tests</h4>
+        <button onclick="testLogin()">Test Login</button>
+        <button onclick="testLogout()">Test Logout</button>
+        <div id="auth-results" class="result"></div>
+
+        <h4>2. Role-Based Access Tests</h4>
+        <button onclick="testRoleAccess()">Test Role Access</button>
+        <div id="role-results" class="result"></div>
+
+        <h4>3. CRUD Operations Tests</h4>
+        <button onclick="testCRUD()">Test CRUD Operations</button>
+        <div id="crud-results" class="result"></div>
+
+        <h4>4. Export Functions Tests</h4>
+        <button onclick="testExports()">Test Export Functions</button>
+        <div id="export-results" class="result"></div>
+
+        <h4>5. Form Validation Tests</h4>
+        <button onclick="testValidation()">Test Form Validation</button>
+        <div id="validation-results" class="result"></div>
+    </div>
+
+    <script>
+        function logResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+            element.innerHTML += `<div class="${className}">${new Date().toLocaleTimeString()}: ${message}</div>`;
+        }
+
+        function testLogin() {
+            logResult('auth-results', 'Testing login functionality...', 'info');
+            // This would need to be done manually in the actual app
+            logResult('auth-results', 'Please test login manually at https://ccmis-f6008.web.app', 'info');
+        }
+
+        function testLogout() {
+            logResult('auth-results', 'Testing logout functionality...', 'info');
+            logResult('auth-results', 'Please test logout manually in the app', 'info');
+        }
+
+        function testRoleAccess() {
+            logResult('role-results', 'Testing role-based access...', 'info');
+            logResult('role-results', 'HCW should only see: Dashboard, Patients, Consultations, Tasks', 'info');
+            logResult('role-results', 'ADMIN should see: All HCW features + Hospitals + Users', 'info');
+            logResult('role-results', 'SUPER_ADMIN should see: Everything', 'info');
+        }
+
+        function testCRUD() {
+            logResult('crud-results', 'Testing CRUD operations...', 'info');
+            logResult('crud-results', 'Test creating, editing, and deleting patients', 'info');
+            logResult('crud-results', 'Test creating, editing, and deleting consultations', 'info');
+            logResult('crud-results', 'Test creating, editing, and deleting tasks', 'info');
+        }
+
+        function testExports() {
+            logResult('export-results', 'Testing export functions...', 'info');
+            logResult('export-results', 'Test CSV export buttons on each page', 'info');
+            logResult('export-results', 'Test Excel export buttons on each page', 'info');
+            logResult('export-results', 'Test PDF export buttons on each page', 'info');
+        }
+
+        function testValidation() {
+            logResult('validation-results', 'Testing form validation...', 'info');
+            logResult('validation-results', 'Test submitting forms with empty required fields', 'info');
+            logResult('validation-results', 'Test submitting forms with invalid data', 'info');
+            logResult('validation-results', 'Test real-time validation feedback', 'info');
+        }
+
+        // Auto-run basic tests
+        window.onload = function() {
+            logResult('test-results', 'CCMIS Application Test Suite Started', 'info');
+            logResult('test-results', 'Please manually test each functionality in the live application', 'info');
+        };
+    </script>
+</body>
+</html>

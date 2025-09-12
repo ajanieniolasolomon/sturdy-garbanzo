@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix User Permissions - CCMIS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .status {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            border-left: 4px solid #007bff;
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Fix User Permissions - CCMIS</h1>
+        
+        <div class="step">
+            <h3>Step 1: Initialize Firebase</h3>
+            <button onclick="initializeFirebase()">Initialize Firebase</button>
+            <div id="firebase-status" class="status info" style="display: none;">
+                Firebase initialized successfully
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Create Firebase Auth Users</h3>
+            <p>This will create Firebase Auth accounts for all existing Firestore users and set their custom claims.</p>
+            <button id="create-auth-btn" onclick="createAuthUsers()" disabled>Create Auth Users</button>
+            <div id="auth-status" class="status info" style="display: none;">
+                Processing...
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Set Custom Claims</h3>
+            <p>This will set the proper role and hospital permissions for all users.</p>
+            <button id="claims-btn" onclick="setCustomClaims()" disabled>Set Custom Claims</button>
+            <div id="claims-status" class="status info" style="display: none;">
+                Processing...
+            </div>
+        </div>
+
+        <div class="log" id="log">
+            <div>Ready to fix user permissions...</div>
+        </div>
+
+        <div class="step">
+            <h3>Test Results</h3>
+            <button onclick="testUserAccess()">Test User Access</button>
+            <div id="test-status" class="status info" style="display: none;">
+                Testing...
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqJqJqJqJqJqJqJqJqJqJqJqJqJqJqJq",
+            authDomain: "ccmis-f6008.firebaseapp.com",
+            projectId: "ccmis-f6008",
+            storageBucket: "ccmis-f6008.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef123456789"
+        };
+
+        let app, auth, functions;
+
+        window.initializeFirebase = async function() {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                functions = getFunctions(app);
+                
+                document.getElementById('firebase-status').style.display = 'block';
+                document.getElementById('firebase-status').className = 'status success';
+                document.getElementById('firebase-status').textContent = 'Firebase initialized successfully';
+                
+                document.getElementById('create-auth-btn').disabled = false;
+                
+                log('✅ Firebase initialized successfully');
+            } catch (error) {
+                document.getElementById('firebase-status').style.display = 'block';
+                document.getElementById('firebase-status').className = 'status error';
+                document.getElementById('firebase-status').textContent = 'Error: ' + error.message;
+                log('❌ Error initializing Firebase: ' + error.message);
+            }
+        };
+
+        window.createAuthUsers = async function() {
+            try {
+                document.getElementById('auth-status').style.display = 'block';
+                document.getElementById('auth-status').className = 'status info';
+                document.getElementById('auth-status').textContent = 'Creating Firebase Auth users...';
+                
+                const createAuthUsers = httpsCallable(functions, 'createAuthUsersForFirestoreUsers');
+                const result = await createAuthUsers();
+                
+                document.getElementById('auth-status').className = 'status success';
+                document.getElementById('auth-status').textContent = 'Auth users created successfully!';
+                document.getElementById('claims-btn').disabled = false;
+                
+                log('✅ Auth users created successfully');
+                log('Results: ' + JSON.stringify(result.data, null, 2));
+            } catch (error) {
+                document.getElementById('auth-status').className = 'status error';
+                document.getElementById('auth-status').textContent = 'Error: ' + error.message;
+                log('❌ Error creating auth users: ' + error.message);
+            }
+        };
+
+        window.setCustomClaims = async function() {
+            try {
+                document.getElementById('claims-status').style.display = 'block';
+                document.getElementById('claims-status').className = 'status info';
+                document.getElementById('claims-status').textContent = 'Setting custom claims...';
+                
+                const setupClaims = httpsCallable(functions, 'setupAllUserClaims');
+                const result = await setupClaims();
+                
+                document.getElementById('claims-status').className = 'status success';
+                document.getElementById('claims-status').textContent = 'Custom claims set successfully!';
+                
+                log('✅ Custom claims set successfully');
+                log('Results: ' + JSON.stringify(result.data, null, 2));
+            } catch (error) {
+                document.getElementById('claims-status').className = 'status error';
+                document.getElementById('claims-status').textContent = 'Error: ' + error.message;
+                log('❌ Error setting custom claims: ' + error.message);
+            }
+        };
+
+        window.testUserAccess = async function() {
+            try {
+                document.getElementById('test-status').style.display = 'block';
+                document.getElementById('test-status').className = 'status info';
+                document.getElementById('test-status').textContent = 'Testing user access...';
+                
+                // Try to sign in with a test user
+                const testEmail = 'admin@ccmis.com';
+                const testPassword = 'admin123';
+                
+                const userCredential = await signInWithEmailAndPassword(auth, testEmail, testPassword);
+                const user = userCredential.user;
+                
+                // Get the ID token to check claims
+                const idTokenResult = await user.getIdTokenResult();
+                const claims = idTokenResult.claims;
+                
+                document.getElementById('test-status').className = 'status success';
+                document.getElementById('test-status').textContent = 'User access test successful!';
+                
+                log('✅ User access test successful');
+                log('User: ' + user.email);
+                log('Claims: ' + JSON.stringify(claims, null, 2));
+                
+                // Sign out
+                await auth.signOut();
+                log('✅ Signed out successfully');
+                
+            } catch (error) {
+                document.getElementById('test-status').className = 'status error';
+                document.getElementById('test-status').textContent = 'Error: ' + error.message;
+                log('❌ Error testing user access: ' + error.message);
+            }
+        };
+
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            log('Page loaded. Click "Initialize Firebase" to begin.');
+        });
+    </script>
+</body>
+</html>

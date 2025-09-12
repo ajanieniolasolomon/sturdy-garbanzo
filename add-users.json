@@ -1,0 +1,37 @@
+{
+  "users": [
+    {
+      "localId": "superadmin001",
+      "email": "superadmin@ccmis.com",
+      "emailVerified": true,
+      "passwordHash": "RkPZtppdReG508rzHDzu5noN0+2QHFAuv6ERxllVjV7sgRgq/zarZHqSgeSgJz9susnl27fHJrX3wDgBseLNqg==",
+      "salt": "mXIfJISIrcGmuA==",
+      "displayName": "Super Admin",
+      "createdAt": "1757372729476",
+      "disabled": false,
+      "providerUserInfo": []
+    },
+    {
+      "localId": "admin001",
+      "email": "admin@ccmis.com",
+      "emailVerified": true,
+      "passwordHash": "RkPZtppdReG508rzHDzu5noN0+2QHFAuv6ERxllVjV7sgRgq/zarZHqSgeSgJz9susnl27fHJrX3wDgBseLNqg==",
+      "salt": "mXIfJISIrcGmuA==",
+      "displayName": "Admin",
+      "createdAt": "1757372729476",
+      "disabled": false,
+      "providerUserInfo": []
+    },
+    {
+      "localId": "hcw001",
+      "email": "hcw@ccmis.com",
+      "emailVerified": true,
+      "passwordHash": "RkPZtppdReG508rzHDzu5noN0+2QHFAuv6ERxllVjV7sgRgq/zarZHqSgeSgJz9susnl27fHJrX3wDgBseLNqg==",
+      "salt": "mXIfJISIrcGmuA==",
+      "displayName": "Health Care Worker",
+      "createdAt": "1757372729476",
+      "disabled": false,
+      "providerUserInfo": []
+    }
+  ]
+}

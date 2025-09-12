@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCMIS Live Testing</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-frame { width: 100%; height: 80vh; border: 2px solid #007bff; border-radius: 8px; }
+        .test-controls { margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px; }
+        .test-button { padding: 10px 15px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        .test-button:hover { background: #0056b3; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 3px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        .credentials { background: #fff3cd; padding: 10px; border-radius: 5px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🧪 CCMIS Live Application Testing</h1>
+    
+    <div class="test-controls">
+        <h3>🔗 Test URLs</h3>
+        <button class="test-button" onclick="loadLocal()">Test Local (localhost:5173)</button>
+        <button class="test-button" onclick="loadProduction()">Test Production (ccmis-f6008.web.app)</button>
+        <button class="test-button" onclick="clearFrame()">Clear Frame</button>
+    </div>
+
+    <div class="credentials">
+        <h4>🔐 Test Credentials</h4>
+        <p><strong>Super Admin:</strong> admin@ccmis.org / admin123</p>
+        <p><strong>Hospital Admin:</strong> admin@ruralhealthcenter.ng / admin123</p>
+        <p><strong>Healthcare Worker:</strong> nelson@ruralhealthcenter.ng / hcw123</p>
+    </div>
+
+    <div id="test-status" class="status info">
+        Ready to test. Click a button above to load the application.
+    </div>
+
+    <iframe id="test-frame" class="test-frame" src="about:blank"></iframe>
+
+    <div class="test-controls">
+        <h3>📋 Testing Checklist</h3>
+        <div id="checklist">
+            <label><input type="checkbox" id="test-1"> 1. Login with Super Admin</label><br>
+            <label><input type="checkbox" id="test-2"> 2. Verify navigation items (should see all)</label><br>
+            <label><input type="checkbox" id="test-3"> 3. Test patient CRUD operations</label><br>
+            <label><input type="checkbox" id="test-4"> 4. Test consultation CRUD operations</label><br>
+            <label><input type="checkbox" id="test-5"> 5. Test task CRUD operations</label><br>
+            <label><input type="checkbox" id="test-6"> 6. Test user creation (ADMIN only)</label><br>
+            <label><input type="checkbox" id="test-7"> 7. Test hospital management (ADMIN only)</label><br>
+            <label><input type="checkbox" id="test-8"> 8. Test export functions (CSV, Excel, PDF)</label><br>
+            <label><input type="checkbox" id="test-9"> 9. Test form validation</label><br>
+            <label><input type="checkbox" id="test-10"> 10. Test role-based access (login as HCW)</label><br>
+            <label><input type="checkbox" id="test-11"> 11. Test mobile responsiveness</label><br>
+            <label><input type="checkbox" id="test-12"> 12. Test error handling</label><br>
+        </div>
+    </div>
+
+    <script>
+        function loadLocal() {
+            const frame = document.getElementById('test-frame');
+            const status = document.getElementById('test-status');
+            
+            status.className = 'status info';
+            status.textContent = 'Loading local application (localhost:5173)...';
+            
+            frame.src = 'http://localhost:5173';
+            
+            frame.onload = function() {
+                status.className = 'status success';
+                status.textContent = '✅ Local application loaded successfully! You can now test the functionality.';
+            };
+            
+            frame.onerror = function() {
+                status.className = 'status error';
+                status.textContent = '❌ Failed to load local application. Make sure the dev server is running.';
+            };
+        }
+
+        function loadProduction() {
+            const frame = document.getElementById('test-frame');
+            const status = document.getElementById('test-status');
+            
+            status.className = 'status info';
+            status.textContent = 'Loading production application (ccmis-f6008.web.app)...';
+            
+            frame.src = 'https://ccmis-f6008.web.app';
+            
+            frame.onload = function() {
+                status.className = 'status success';
+                status.textContent = '✅ Production application loaded successfully! You can now test the functionality.';
+            };
+            
+            frame.onerror = function() {
+                status.className = 'status error';
+                status.textContent = '❌ Failed to load production application.';
+            };
+        }
+
+        function clearFrame() {
+            const frame = document.getElementById('test-frame');
+            const status = document.getElementById('test-status');
+            
+            frame.src = 'about:blank';
+            status.className = 'status info';
+            status.textContent = 'Frame cleared. Ready to test.';
+        }
+
+        // Auto-update test progress
+        function updateProgress() {
+            const checkboxes = document.querySelectorAll('#checklist input[type="checkbox"]');
+            const checked = document.querySelectorAll('#checklist input[type="checkbox"]:checked');
+            const progress = Math.round((checked.length / checkboxes.length) * 100);
+            
+            const status = document.getElementById('test-status');
+            if (progress === 100) {
+                status.className = 'status success';
+                status.textContent = `🎉 ALL TESTS COMPLETED! (${progress}%) - Application is production ready!`;
+            } else if (progress > 0) {
+                status.className = 'status info';
+                status.textContent = `Testing in progress: ${checked.length}/${checkboxes.length} tests completed (${progress}%)`;
+            }
+        }
+
+        // Add event listeners to checkboxes
+        document.addEventListener('DOMContentLoaded', function() {
+            const checkboxes = document.querySelectorAll('#checklist input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', updateProgress);
+            });
+        });
+    </script>
+</body>
+</html>
