@@ -67,23 +67,58 @@ export const exportToPDF = async (
 };
 
 // Domain-specific helpers
+const computeFromConsultations = (p: any) => {
+  const consults = Array.isArray(p.consultations) ? p.consultations : [];
+  const sorted = [...consults].sort((a, b) => new Date(a.consultationDate).getTime() - new Date(b.consultationDate).getTime());
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  const begin = first || {};
+  const end = last || {};
+
+  return {
+    latestDiagnosis: last?.diagnosis || begin?.diagnosis || '',
+    treatmentStartDate: begin?.consultationDate || '',
+    initialWeight: begin?.weightKg || '',
+    initialHeight: begin?.heightCm || '',
+    initialLabTests: begin?.labTests || '',
+    initialDrugs: begin?.treatment || '',
+    lastVisitDate: last?.consultationDate || '',
+    endingWeight: end?.weightKg || '',
+    endingHeight: end?.heightCm || '',
+    endingLabTests: end?.labTests || '',
+    endingDrugs: end?.treatment || '',
+    nextAppointmentDate: last?.followUpDate || '',
+  };
+};
+
 export const mapPatientsForExport = (patients: any[]) =>
-  patients.map((p) => ({
-    FullName: p.fullName,
-    CCNumber: p.ccNumber,
-    Phone: p.phoneNumber || '',
-    Age: p.age ?? '',
-    Gender: p.gender,
-    Address: p.address || '',
-    LGA: p.lga || '',
-    State: p.state || '',
-    Country: p.country,
-    Status: p.status,
-    AssignedHCW: p.assignedHCW || '',
-    HospitalId: p.hospitalId || '',
-    CreatedAt: p.createdAt || '',
-    UpdatedAt: p.updatedAt || '',
-  }));
+  patients.map((raw) => {
+    const p = { ...raw, ...(computeFromConsultations(raw) as any) };
+    return {
+      'CC No': p.ccNumber,
+      'Name': p.fullName,
+      'Age': p.age ?? '',
+      'gender': p.gender,
+      'Nationality': p.nationality || p.country || '',
+      'Phone number': p.phoneNumber || p.phone || '',
+      'address': p.address || '',
+      'contact phone': p.emergencyContact || '',
+      'Assigned Hospital name': p.hospitalName || p.hospitalId || '',
+      'Diagnosis': p.latestDiagnosis || '',
+      'Date of treatment start': p.treatmentStartDate || '',
+      'Weight at beginning date chosen': p.initialWeight || '',
+      'Height at beginning date chosen': p.initialHeight || '',
+      'Lab test at beginning date chosen': p.initialLabTests || '',
+      'Drugs given at beginning date chosen': p.initialDrugs || '',
+      'Last visit date': p.lastVisitDate || '',
+      'Weight at ending date chosen': p.endingWeight || '',
+      'Height at ending date chosen': p.endingHeight || '',
+      'Lab test at ending date chosen': p.endingLabTests || '',
+      'Drugs given at ending date chosen': p.endingDrugs || '',
+      'Next appointment date': p.nextAppointmentDate || '',
+      'Status': p.status,
+    };
+  });
 
 export default {
   exportToCSV,

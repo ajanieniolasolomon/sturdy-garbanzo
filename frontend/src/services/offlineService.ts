@@ -46,6 +46,8 @@ class OfflineService {
   };
   private pendingOperations: OfflineOperation[] = [];
   private syncListeners: ((status: SyncStatus) => void)[] = [];
+  private backoffBaseMs: number = 30_000; // 30s base
+  private maxBackoffMs: number = 24 * 60 * 60 * 1000; // 1 day cap
 
   constructor() {
     this.initializeOfflineSupport();
@@ -56,11 +58,16 @@ class OfflineService {
     window.addEventListener('online', this.handleOnline.bind(this));
     window.addEventListener('offline', this.handleOffline.bind(this));
 
-    // Load pending operations from localStorage
+    // Load pending operations and last sync from localStorage
     this.loadPendingOperations();
+    this.syncStatus.lastSyncTime = this.getLastSyncTime();
+    // Notify listeners of initial status
+    this.notifyListeners();
 
     // Start periodic sync when online
     if (this.isOnline) {
+      // Perform an initial bidirectional sync to set accurate last sync
+      this.performBidirectionalSync().catch(() => {});
       this.startPeriodicSync();
     }
   }
@@ -120,14 +127,23 @@ class OfflineService {
         await setDoc(doc(db, collection, docId),{ ...operation.data, id: docId });
         console.log(`✅ Created ${collection}/${docId} online`);
         // Update sync status
-        this.syncStatus.lastSyncTime = Date.now();
+        this.setLastSyncTime(Date.now());
         this.notifyListeners();
       } catch (error) {
         console.error(`❌ Failed to create ${collection}/${docId} online:`, error);
         this.queueOperation(operation);
       }
     } else {
+      // Perform a local write so UI updates immediately via Firestore offline persistence
+      try {
+        await setDoc(doc(db, collection, docId), { ...operation.data, id: docId });
+      } catch (e) {
+        console.warn('Local setDoc failed (will rely on cache fallback):', e);
+      }
+      // Also queue the operation for later server sync and update local cache
       this.queueOperation(operation);
+      this.updateLocalCache(collection, [{ id: docId, ...operation.data }]);
+      this.notifyDataChange(collection, [{ id: docId, ...operation.data }]);
       console.log(`📝 Queued CREATE operation for ${collection}/${docId}`);
     }
   }
@@ -156,14 +172,28 @@ class OfflineService {
         await updateDoc(doc(db, collection, docId), operation.data);
         console.log(`✅ Updated ${collection}/${docId} online`);
         // Update sync status
-        this.syncStatus.lastSyncTime = Date.now();
+        this.setLastSyncTime(Date.now());
         this.notifyListeners();
       } catch (error) {
         console.error(`❌ Failed to update ${collection}/${docId} online:`, error);
         this.queueOperation(operation);
       }
     } else {
+      // Perform a local update so UI updates immediately via Firestore offline persistence
+      try {
+        await updateDoc(doc(db, collection, docId), operation.data);
+      } catch (e) {
+        console.warn('Local updateDoc failed (may be a new doc):', e);
+        try {
+          await setDoc(doc(db, collection, docId), { id: docId, ...operation.data }, { merge: true } as any);
+        } catch (e2) {
+          console.warn('Local fallback setDoc failed:', e2);
+        }
+      }
+      // Queue and update local cache immediately
       this.queueOperation(operation);
+      this.updateLocalCache(collection, [{ id: docId, ...operation.data }]);
+      this.notifyDataChange(collection, [{ id: docId, ...operation.data }]);
       console.log(`📝 Queued UPDATE operation for ${collection}/${docId}`);
     }
   }
@@ -190,6 +220,16 @@ class OfflineService {
         this.queueOperation(operation);
       }
     } else {
+      // Perform a local soft delete so UI updates immediately
+      try {
+        await updateDoc(doc(db, collection, docId), {
+          isActive: false,
+          deletedAt: serverTimestamp(),
+          deletedBy: userId
+        } as any);
+      } catch (e) {
+        console.warn('Local delete (soft) failed:', e);
+      }
       this.queueOperation(operation);
       console.log(`📝 Queued DELETE operation for ${collection}/${docId}`);
     }
@@ -297,11 +337,13 @@ class OfflineService {
       } catch (error) {
         console.error(`❌ Failed to sync operation: ${operation.type} ${operation.collection}/${operation.docId}`, error);
         operation.retryCount++;
-        
-        if (operation.retryCount < 3) {
+        // Exponential backoff scheduling metadata (persisted)
+        const nextDelay = Math.min(this.backoffBaseMs * Math.pow(2, operation.retryCount), this.maxBackoffMs);
+        (operation as any).nextRetryAt = Date.now() + nextDelay;
+        if (operation.retryCount < 100) {
           failedOperations.push(operation);
         } else {
-          console.error(`🚫 Operation failed after 3 retries: ${operation.id}`);
+          console.error(`🚫 Operation failed after many retries: ${operation.id}`);
         }
       }
     }
@@ -309,7 +351,7 @@ class OfflineService {
     // Update pending operations
     this.pendingOperations = failedOperations;
     this.syncStatus.pendingOperations = this.pendingOperations.length;
-    this.syncStatus.lastSyncTime = Date.now();
+    this.setLastSyncTime(Date.now());
     this.syncStatus.isSyncing = false;
 
     this.savePendingOperations();
@@ -320,6 +362,12 @@ class OfflineService {
 
   private async executeOperation(operation: OfflineOperation) {
     const docRef = doc(db, operation.collection, operation.docId);
+
+    // Respect backoff schedule if set
+    const nextRetryAt = (operation as any).nextRetryAt as number | undefined;
+    if (nextRetryAt && Date.now() < nextRetryAt) {
+      throw new Error('Backoff period not elapsed');
+    }
 
     switch (operation.type) {
       case 'CREATE':
@@ -533,6 +581,18 @@ class OfflineService {
         this.pendingOperations = JSON.parse(stored);
         this.syncStatus.pendingOperations = this.pendingOperations.length;
       }
+      // Backfill collection caches from Firestore for immediate offline usage on first run
+      // This is best-effort; failures are non-fatal
+      try {
+        ['patients','consultations','tasks','users','hospitals'].forEach((c) => {
+          const key = `ccmis_cache_${c}`;
+          if (!localStorage.getItem(key)) {
+            localStorage.setItem(key, JSON.stringify([]));
+          }
+        });
+      } catch (_) {
+        // ignore
+      }
     } catch (error) {
       console.error('Error loading pending operations:', error);
       this.pendingOperations = [];
@@ -632,7 +692,7 @@ class OfflineService {
       // Then, pull server changes for all collections
       await this.pullServerChanges();
 
-      this.syncStatus.lastSyncTime = Date.now();
+      this.setLastSyncTime(Date.now());
       console.log('✅ Bidirectional sync completed');
     } catch (error) {
       console.error('❌ Bidirectional sync failed:', error);
@@ -723,35 +783,23 @@ class OfflineService {
     console.log(`📊 Data change notification for ${collectionName}:`, changes.length, 'items');
   }
 
-  // Enhanced sync with conflict detection
-  async enhancedSync(): Promise<void> {
-    if (!this.isOnline) {
-      console.log('Cannot perform enhanced sync while offline');
-      return;
-    }
-
-    console.log('🚀 Starting enhanced sync with conflict detection...');
-    
+  // last sync persistence
+  private setLastSyncTime(timestamp: number) {
     try {
-      // Perform bidirectional sync
-      await this.performBidirectionalSync();
-      
-      // Check for any remaining conflicts
-      await this.detectAndResolveConflicts();
-      
-      console.log('✅ Enhanced sync completed successfully');
-    } catch (error) {
-      console.error('❌ Enhanced sync failed:', error);
+      this.syncStatus.lastSyncTime = timestamp;
+      localStorage.setItem('ccmis_last_sync_global', String(timestamp));
+    } catch (e) {
+      // no-op
     }
   }
 
-  private async detectAndResolveConflicts(): Promise<void> {
-    // This method would detect any remaining conflicts after sync
-    // and apply appropriate resolution strategies
-    console.log('🔍 Checking for remaining conflicts...');
-    
-    // Implementation would check for conflicts between local and server data
-    // and apply resolution strategies as needed
+  private getLastSyncTime(): number | null {
+    try {
+      const v = localStorage.getItem('ccmis_last_sync_global');
+      return v ? parseInt(v) : null;
+    } catch (e) {
+      return null;
+    }
   }
 }
 

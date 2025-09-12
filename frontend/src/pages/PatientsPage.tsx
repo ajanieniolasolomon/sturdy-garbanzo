@@ -64,7 +64,7 @@ const PatientsPage: React.FC = () => {
   const getHcwName = (hcwId: string): string => {
     if (!hcwId) return 'Not assigned';
     const hcw = users.find(u => u.id === hcwId || u.username === hcwId);
-    return hcw ? hcw.fullName : hcwId;
+    return hcw ? hcw.fullName : 'Not assigned';
   };
 
   const loadPatients = async () => {
@@ -297,7 +297,7 @@ const PatientsPage: React.FC = () => {
         ) : (
           <div className="grid gap-6">
             {filteredPatients.map((patient) => (
-              <div key={patient.id} className="group relative bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 border border-white/20">
+              <div key={patient.id} className="group relative bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 border border-white/20 cursor-pointer" onClick={() => window.location.assign(`/patients/${patient.id}`)}>
                 <div className="p-6">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -328,10 +328,14 @@ const PatientsPage: React.FC = () => {
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                             patient.status === 'new_case' ? 'bg-blue-100 text-blue-800' :
                             patient.status === 'on_treatment' ? 'bg-yellow-100 text-yellow-800' :
-                            patient.status === 'completed' ? 'bg-green-100 text-green-800' :
+                            patient.status === 'transferred_in' ? 'bg-emerald-100 text-emerald-800' :
+                            patient.status === 'transferred_out' ? 'bg-purple-100 text-purple-800' :
+                            patient.status === 'loss_to_follow_up' ? 'bg-orange-100 text-orange-800' :
+                            patient.status === 'dead' ? 'bg-red-100 text-red-800' :
+                            patient.status === 'stopped' ? 'bg-gray-300 text-gray-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
-                            {patient.status.replace('_', ' ').toUpperCase()}
+                            {patient.status.replace(/_/g, ' ').toUpperCase()}
                           </span>
                         </div>
                       </div>

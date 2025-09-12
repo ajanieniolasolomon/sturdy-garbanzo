@@ -24,6 +24,22 @@ const Dashboard: React.FC = () => {
     tasks: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [followups, setFollowups] = useState<{ title: string; dueDate: string; patientName?: string; id: string }[]>([]);
+  const buildHorizon = (days: number) => {
+    const today = new Date();
+    const slots: { date: string; count: number }[] = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      slots.push({ date: d.toISOString().split('T')[0], count: 0 });
+    }
+    followups.forEach(f => {
+      const key = (f.dueDate || '').toString().split('T')[0];
+      const slot = slots.find(s => s.date === key);
+      if (slot) slot.count += 1;
+    });
+    return slots;
+  };
 
   const loadDataWithAPI = async () => {
     try {
@@ -63,6 +79,11 @@ const Dashboard: React.FC = () => {
         consultations: filteredConsultations.length,
         tasks: filteredTasks.length,
       });
+      const fu = filteredTasks
+        .filter(t => t.status !== 'completed')
+        .filter(t => (t.title || '').toLowerCase().startsWith('follow-up:'))
+        .map(t => ({ id: t.id, title: t.title, dueDate: t.dueDate || '', patientName: t.patientName }));
+      setFollowups(fu.sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()).slice(0, 10));
       setLoading(false);
     } catch (error) {
       console.error('🔴 API fallback error:', error);
@@ -350,6 +371,60 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Follow-ups (Next 10) */}
+        <div className="mt-8 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20">
+          <div className="px-8 py-6 border-b border-gray-200/50 flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-bold text-gray-900">Upcoming Follow-ups</h3>
+              <p className="mt-1 text-sm text-gray-600">Next appointments from tasks</p>
+            </div>
+            <button onClick={() => navigate('/tasks')} className="text-primary-700 font-semibold hover:underline">View all</button>
+          </div>
+          <div className="p-6">
+            {followups.length === 0 ? (
+              <p className="text-sm text-gray-600">No upcoming follow-ups.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {followups.map(f => (
+                  <div key={f.id} className="border border-gray-200 rounded-xl p-4">
+                    <div className="text-sm text-gray-500">Due</div>
+                    <div className="text-lg font-semibold">{f.dueDate ? new Date(f.dueDate).toLocaleDateString() : '-'}</div>
+                    <div className="mt-1 font-medium">{f.patientName || f.title.replace(/^Follow-up:\\s*/i,'')}</div>
+                    <div className="text-xs text-gray-500 truncate">{f.title}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Follow-ups Calendar (7 / 30 days) */}
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {[7, 30].map(windowDays => {
+            const horizon = buildHorizon(windowDays);
+            return (
+              <div key={windowDays} className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/20">
+                <div className="px-8 py-6 border-b border-gray-200/50 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">Follow-ups (Next {windowDays} days)</h3>
+                    <p className="mt-1 text-sm text-gray-600">Count of pending follow-ups per day</p>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-7 gap-2">
+                    {horizon.map((slot) => (
+                      <button key={slot.date} className="text-center border border-gray-200 rounded-lg p-2 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500" onClick={() => navigate(`/tasks?due=${slot.date}`)}>
+                        <div className="text-[10px] text-gray-500">{new Date(slot.date).toLocaleDateString(undefined,{ month:'short', day:'numeric'})}</div>
+                        <div className={`mt-1 text-sm font-bold ${slot.count>0?'text-primary-700':'text-gray-400'}`}>{slot.count}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

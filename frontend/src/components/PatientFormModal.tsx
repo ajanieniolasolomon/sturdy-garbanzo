@@ -65,7 +65,7 @@ const PatientFormModal: React.FC<PatientFormModalProps> = ({
           assignedHCW: editingPatient.assignedHCW || '',
           country: editingPatient.country,
           nationality: editingPatient.nationality || 'Nigerian',
-          status: editingPatient.status,
+          status: editingPatient.status as any,
         });
         setSelectedHospitalId(editingPatient.hospitalId);
       } else {
@@ -362,7 +362,7 @@ const PatientFormModal: React.FC<PatientFormModalProps> = ({
               {/* HCW Assignment - Only show for Admin/SuperAdmin */}
               {user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' ? (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text.sm font-medium text-gray-700 mb-2">
                     Assign to Healthcare Worker
                   </label>
                   <select
@@ -412,6 +412,27 @@ const PatientFormModal: React.FC<PatientFormModalProps> = ({
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                   placeholder="Enter emergency contact"
                 />
+              </div>
+
+              {/* Status */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Status
+                </label>
+                <select
+                  name="status"
+                  value={formData.status}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                >
+                  <option value="new_case">New Case</option>
+                  <option value="transferred_in">Transferred In</option>
+                  <option value="transferred_out">Transferred Out</option>
+                  <option value="loss_to_follow_up">Loss to Follow-Up</option>
+                  <option value="dead">Dead</option>
+                  <option value="stopped">Stopped</option>
+                  <option value="on_treatment">On Treatment</option>
+                </select>
               </div>
             </div>
 

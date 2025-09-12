@@ -48,7 +48,7 @@ export interface Patient {
   country: string;
   nationality: 'Nigerian' | 'Refugee' | 'Others';
   notes?: string;
-  status: 'new_case' | 'on_treatment' | 'completed' | 'discharged';
+  status: 'new_case' | 'transferred_in' | 'transferred_out' | 'loss_to_follow_up' | 'dead' | 'stopped' | 'on_treatment';
   assignedHCW?: string;
   emergencyContact?: string;
   medicalHistory?: string;
@@ -75,6 +75,16 @@ export interface Consultation {
   notes?: string;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   consultationDate: string;
+  followUpDate?: string;
+  weightKg?: number;
+  heightCm?: number;
+  vitals?: {
+    temperatureC?: number;
+    pulseBpm?: number;
+    respirationRate?: number;
+    bpSystolic?: number;
+    bpDiastolic?: number;
+  };
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -147,7 +157,7 @@ export interface PatientForm {
   country: string;
   nationality: 'Nigerian' | 'Refugee' | 'Others';
   notes?: string;
-  status: 'new_case' | 'on_treatment' | 'completed' | 'discharged';
+  status: 'new_case' | 'transferred_in' | 'transferred_out' | 'loss_to_follow_up' | 'dead' | 'stopped' | 'on_treatment';
   assignedHCW?: string;
   emergencyContact?: string;
   medicalHistory?: string;
@@ -190,6 +200,14 @@ export interface ConsultationForm {
   notes?: string;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
   consultationDate: string;
+  followUpDate?: string;
+  weightKg?: number | string;
+  heightCm?: number | string;
+  temperatureC?: number | string;
+  pulseBpm?: number | string;
+  respirationRate?: number | string;
+  bpSystolic?: number | string;
+  bpDiastolic?: number | string;
 }
 
 export interface TaskForm {

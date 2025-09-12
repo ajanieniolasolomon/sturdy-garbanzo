@@ -243,10 +243,32 @@ class FirebaseService {
     if (hospitalId) {
       qRef = query(qRef, where('hospitalId', '==', hospitalId));
     }
-    return onSnapshot(qRef, (snapshot) => {
+    // Subscribe to Firestore (online/offline persistence) and also reflect local cache change notifications
+    const unsubscribeFirestore = onSnapshot(qRef, (snapshot) => {
       const patients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Patient[];
       callback({ data: patients, total: patients.length, success: true });
     });
+
+    // Additionally, poll local cache briefly to surface queued creates immediately if Firestore snapshot hasn't updated yet
+    const cacheKey = 'ccmis_cache_patients';
+    const cacheInterval = window.setInterval(() => {
+      try {
+        const cachedRaw = localStorage.getItem(cacheKey);
+        if (!cachedRaw) return;
+        const cached = JSON.parse(cachedRaw) as any[];
+        const filtered = hospitalId ? cached.filter(p => p.hospitalId === hospitalId && p.isActive !== false) : cached;
+        if (Array.isArray(filtered) && filtered.length > 0) {
+          callback({ data: filtered as Patient[], total: filtered.length, success: true });
+        }
+      } catch (_) {
+        // ignore
+      }
+    }, 1500);
+
+    return () => {
+      unsubscribeFirestore();
+      window.clearInterval(cacheInterval);
+    };
   }
 
   async createPatient(patientData: PatientForm & { hospitalId: string }, userId?: string) {
@@ -439,10 +461,32 @@ class FirebaseService {
     if (hospitalId) {
       qRef = query(qRef, where('hospitalId', '==', hospitalId));
     }
-    return onSnapshot(qRef, (snapshot) => {
+    const unsubscribeFirestore = onSnapshot(qRef, (snapshot) => {
       const consultations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Consultation[];
       callback({ data: consultations, total: consultations.length, success: true });
     });
+
+    const cacheKey = 'ccmis_cache_consultations';
+    const cacheInterval = window.setInterval(() => {
+      try {
+        const cachedRaw = localStorage.getItem(cacheKey);
+        if (!cachedRaw) return;
+        const cached = JSON.parse(cachedRaw) as any[];
+        let filtered = cached.filter(c => c.isActive !== false);
+        if (patientId) filtered = filtered.filter(c => c.patientId === patientId);
+        if (hospitalId) filtered = filtered.filter(c => c.hospitalId === hospitalId);
+        if (Array.isArray(filtered) && filtered.length > 0) {
+          callback({ data: filtered as Consultation[], total: filtered.length, success: true });
+        }
+      } catch (_) {
+        // ignore
+      }
+    }, 1500);
+
+    return () => {
+      unsubscribeFirestore();
+      window.clearInterval(cacheInterval);
+    };
   }
 
   async createConsultation(consultationData: ConsultationForm & { 
@@ -452,8 +496,20 @@ class FirebaseService {
     hospitalId: string; 
   }, userId?: string): Promise<Consultation> {
     try {
+      const vitals = {
+        temperatureC: (consultationData as any).temperatureC !== '' ? Number((consultationData as any).temperatureC) : undefined,
+        pulseBpm: (consultationData as any).pulseBpm !== '' ? Number((consultationData as any).pulseBpm) : undefined,
+        respirationRate: (consultationData as any).respirationRate !== '' ? Number((consultationData as any).respirationRate) : undefined,
+        bpSystolic: (consultationData as any).bpSystolic !== '' ? Number((consultationData as any).bpSystolic) : undefined,
+        bpDiastolic: (consultationData as any).bpDiastolic !== '' ? Number((consultationData as any).bpDiastolic) : undefined,
+      };
+      const weightKg = (consultationData as any).weightKg !== '' ? Number((consultationData as any).weightKg) : undefined;
+      const heightCm = (consultationData as any).heightCm !== '' ? Number((consultationData as any).heightCm) : undefined;
       const newConsultation: Omit<Consultation, 'id'> = {
         ...consultationData,
+        vitals,
+        weightKg,
+        heightCm,
         isActive: true,
         createdAt: serverTimestamp() as any,
         updatedAt: serverTimestamp() as any,
@@ -463,6 +519,33 @@ class FirebaseService {
       const docId = docRef.id;
       await offlineService.createDocument('consultations', docId, newConsultation, userId);
       
+      // Auto-create a follow-up task if followUpDate provided
+      if ((consultationData as any).followUpDate) {
+        const followupTask: any = {
+          title: `Follow-up: ${consultationData.patientName}`,
+          description: consultationData.diagnosis ? `Diagnosis: ${consultationData.diagnosis}` : 'Follow-up visit',
+          priority: 'medium',
+          status: 'pending',
+          dueDate: (consultationData as any).followUpDate,
+          assignedTo: consultationData.hcwId,
+          assignedToName: consultationData.hcwName,
+          hospitalId: consultationData.hospitalId,
+          patientId: consultationData.patientId,
+          patientName: consultationData.patientName,
+          isActive: true,
+          createdAt: serverTimestamp() as any,
+          updatedAt: serverTimestamp() as any,
+        };
+        const taskRef = doc(collection(db, 'tasks'));
+        await offlineService.createDocument('tasks', taskRef.id, followupTask, userId);
+      }
+
+      // If patient seen today, auto-complete any follow-up task due today
+      try {
+        const today = new Date(consultationData.consultationDate).toISOString().split('T')[0];
+        await this.completeFollowupTasksForDate(consultationData.patientId, consultationData.hospitalId, today, userId);
+      } catch (_) {}
+
       return {
         id: docId,
         ...newConsultation,
@@ -477,13 +560,53 @@ class FirebaseService {
 
   async updateConsultation(id: string, consultationData: Partial<ConsultationForm>, userId?: string): Promise<void> {
     try {
-      await offlineService.updateDocument('consultations', id, {
+      const vitals = {
+        temperatureC: (consultationData as any).temperatureC !== '' ? Number((consultationData as any).temperatureC) : undefined,
+        pulseBpm: (consultationData as any).pulseBpm !== '' ? Number((consultationData as any).pulseBpm) : undefined,
+        respirationRate: (consultationData as any).respirationRate !== '' ? Number((consultationData as any).respirationRate) : undefined,
+        bpSystolic: (consultationData as any).bpSystolic !== '' ? Number((consultationData as any).bpSystolic) : undefined,
+        bpDiastolic: (consultationData as any).bpDiastolic !== '' ? Number((consultationData as any).bpDiastolic) : undefined,
+      };
+      const weightKg = (consultationData as any).weightKg !== '' ? Number((consultationData as any).weightKg) : undefined;
+      const heightCm = (consultationData as any).heightCm !== '' ? Number((consultationData as any).heightCm) : undefined;
+      const payload: any = {
         ...consultationData,
+        ...(Object.values(vitals).some(v => v !== undefined) ? { vitals } : {}),
+        ...(weightKg !== undefined ? { weightKg } : {}),
+        ...(heightCm !== undefined ? { heightCm } : {}),
         updatedAt: serverTimestamp()
-      }, userId);
+      };
+      await offlineService.updateDocument('consultations', id, payload, userId);
+      // If consultationDate is provided/changed, complete follow-up tasks for that date
+      if ((consultationData as any).consultationDate && (consultationData as any).patientId && (consultationData as any).hospitalId) {
+        const dateStr = new Date((consultationData as any).consultationDate).toISOString().split('T')[0];
+        await this.completeFollowupTasksForDate((consultationData as any).patientId, (consultationData as any).hospitalId, dateStr, userId);
+      }
     } catch (error) {
       console.error('Update consultation error:', error);
       throw error;
+    }
+  }
+
+  private async completeFollowupTasksForDate(patientId: string, hospitalId: string, dateYYYYMMDD: string, userId?: string): Promise<void> {
+    try {
+      // Query tasks for patient and due date
+      const qRef = query(
+        collection(db, 'tasks'),
+        where('isActive', '==', true),
+        where('patientId', '==', patientId),
+        where('hospitalId', '==', hospitalId),
+        where('status', '==', 'pending')
+      );
+      const snap = await getDocs(qRef);
+      const toComplete = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as any))
+        .filter(t => (t.dueDate || '').toString().split('T')[0] === dateYYYYMMDD);
+      for (const t of toComplete) {
+        await offlineService.updateDocument('tasks', t.id, { status: 'completed', updatedAt: serverTimestamp() as any }, userId);
+      }
+    } catch (e) {
+      console.warn('Auto-complete follow-up tasks failed:', e);
     }
   }
 
@@ -553,10 +676,33 @@ class FirebaseService {
     if (status) {
       qRef = query(qRef, where('status', '==', status));
     }
-    return onSnapshot(qRef, (snapshot) => {
+    const unsubscribeFirestore = onSnapshot(qRef, (snapshot) => {
       const tasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Task[];
       callback({ data: tasks, total: tasks.length, success: true });
     });
+
+    const cacheKey = 'ccmis_cache_tasks';
+    const cacheInterval = window.setInterval(() => {
+      try {
+        const cachedRaw = localStorage.getItem(cacheKey);
+        if (!cachedRaw) return;
+        const cached = JSON.parse(cachedRaw) as any[];
+        let filtered = cached.filter(t => t.isActive !== false);
+        if (hospitalId) filtered = filtered.filter(t => t.hospitalId === hospitalId);
+        if (assignedTo) filtered = filtered.filter(t => t.assignedTo === assignedTo);
+        if (status) filtered = filtered.filter(t => t.status === status);
+        if (Array.isArray(filtered) && filtered.length > 0) {
+          callback({ data: filtered as Task[], total: filtered.length, success: true });
+        }
+      } catch (_) {
+        // ignore
+      }
+    }, 1500);
+
+    return () => {
+      unsubscribeFirestore();
+      window.clearInterval(cacheInterval);
+    };
   }
 
   async createTask(taskData: TaskForm & { 

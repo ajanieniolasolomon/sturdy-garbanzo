@@ -3,7 +3,7 @@ import { useAppSelector, useAppDispatch } from '../hooks/redux';
 import { addNotification } from '../store/slices/uiSlice';
 import firebaseService from '../services/firebaseService';
 import validationService from '../services/validationService';
-import type { Task, TaskForm, User } from '../types';
+import type { Task, TaskForm, User, Patient } from '../types';
 import {
   XMarkIcon,
   CalendarIcon,
@@ -26,6 +26,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
   const dispatch = useAppDispatch();
   const { user } = useAppSelector(state => state.auth);
   const [users, setUsers] = useState<User[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -36,11 +37,13 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     assignedTo: '',
     dueDate: '',
     patientId: '',
+    patientName: '',
   });
 
   useEffect(() => {
     if (isOpen) {
       loadUsers();
+      loadPatients();
       if (editingTask) {
         setFormData({
           title: editingTask.title,
@@ -49,6 +52,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
           assignedTo: editingTask.assignedTo,
           dueDate: editingTask.dueDate ? editingTask.dueDate.split('T')[0] : '',
           patientId: editingTask.patientId || '',
+          patientName: editingTask.patientName || '',
         });
       } else {
         resetForm();
@@ -65,6 +69,15 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     }
   };
 
+  const loadPatients = async () => {
+    try {
+      const result = await firebaseService.getPatients(user?.hospitalId, undefined);
+      setPatients(result.data);
+    } catch (error) {
+      console.error('Error loading patients for task modal:', error);
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       title: '',
@@ -73,6 +86,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
       assignedTo: '',
       dueDate: '',
       patientId: '',
+      patientName: '',
     });
     setErrors({});
   };
@@ -263,14 +277,20 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Related Patient (Optional)
                 </label>
-                <input
-                  type="text"
-                  name="patientName"
-                  value={formData.patientName}
-                  onChange={handleInputChange}
+                <select
+                  name="patientId"
+                  value={formData.patientId}
+                  onChange={(e) => {
+                    const selected = patients.find(p => p.id === e.target.value);
+                    setFormData(prev => ({ ...prev, patientId: e.target.value, patientName: selected?.fullName || '' }));
+                  }}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-                  placeholder="Patient name"
-                />
+                >
+                  <option value="">Select patient</option>
+                  {patients.map(p => (
+                    <option key={p.id} value={p.id}>{p.fullName} (CC: {p.ccNumber})</option>
+                  ))}
+                </select>
               </div>
             </div>
 

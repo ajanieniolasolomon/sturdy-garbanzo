@@ -39,6 +39,14 @@ const ConsultationFormModal: React.FC<ConsultationFormModalProps> = ({
     notes: '',
     status: 'scheduled',
     consultationDate: '',
+    followUpDate: '',
+    weightKg: '',
+    heightCm: '',
+    temperatureC: '',
+    pulseBpm: '',
+    respirationRate: '',
+    bpSystolic: '',
+    bpDiastolic: '',
   });
 
   useEffect(() => {
@@ -54,6 +62,14 @@ const ConsultationFormModal: React.FC<ConsultationFormModalProps> = ({
           notes: editingConsultation.notes || '',
           status: editingConsultation.status,
           consultationDate: editingConsultation.consultationDate ? editingConsultation.consultationDate.split('T')[0] : '',
+          followUpDate: editingConsultation.followUpDate ? editingConsultation.followUpDate.split('T')[0] : '',
+          weightKg: editingConsultation.weightKg?.toString() || '',
+          heightCm: editingConsultation.heightCm?.toString() || '',
+          temperatureC: editingConsultation.vitals?.temperatureC?.toString() || '',
+          pulseBpm: editingConsultation.vitals?.pulseBpm?.toString() || '',
+          respirationRate: editingConsultation.vitals?.respirationRate?.toString() || '',
+          bpSystolic: editingConsultation.vitals?.bpSystolic?.toString() || '',
+          bpDiastolic: editingConsultation.vitals?.bpDiastolic?.toString() || '',
         });
       } else {
         resetForm();
@@ -84,6 +100,14 @@ const ConsultationFormModal: React.FC<ConsultationFormModalProps> = ({
       notes: '',
       status: 'scheduled',
       consultationDate: '',
+      followUpDate: '',
+      weightKg: '',
+      heightCm: '',
+      temperatureC: '',
+      pulseBpm: '',
+      respirationRate: '',
+      bpSystolic: '',
+      bpDiastolic: '',
     });
     setErrors({});
   };
@@ -108,15 +132,26 @@ const ConsultationFormModal: React.FC<ConsultationFormModalProps> = ({
       const patient = patients.find(p => p.id === formData.patientId);
       const hcw = users.find(u => u.id === user?.id);
       
+      const prepared = {
+        ...formData,
+        weightKg: formData.weightKg === '' ? undefined : Number(formData.weightKg),
+        heightCm: formData.heightCm === '' ? undefined : Number(formData.heightCm),
+        temperatureC: formData.temperatureC === '' ? undefined : Number(formData.temperatureC),
+        pulseBpm: formData.pulseBpm === '' ? undefined : Number(formData.pulseBpm),
+        respirationRate: formData.respirationRate === '' ? undefined : Number(formData.respirationRate),
+        bpSystolic: formData.bpSystolic === '' ? undefined : Number(formData.bpSystolic),
+        bpDiastolic: formData.bpDiastolic === '' ? undefined : Number(formData.bpDiastolic),
+      } as any;
+
       if (editingConsultation) {
-        await firebaseService.updateConsultation(editingConsultation.id, formData);
+        await firebaseService.updateConsultation(editingConsultation.id, prepared);
         dispatch(addNotification({
           type: 'success',
           message: 'Consultation updated successfully'
         }));
       } else {
         const consultationData = {
-          ...formData,
+          ...prepared,
           patientName: patient?.fullName || '',
           hcwId: user?.id || '',
           hcwName: hcw?.fullName || '',
@@ -247,8 +282,11 @@ const ConsultationFormModal: React.FC<ConsultationFormModalProps> = ({
                     className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
                       errors.consultationDate ? 'border-red-500' : 'border-gray-300'
                     }`}
+                    onClick={(e) => (e.currentTarget as HTMLInputElement).showPicker?.()}
                   />
-                  <CalendarIcon className="absolute right-3 top-3.5 h-5 w-5 text-gray-400" />
+                  <button type="button" onClick={() => (document.querySelector('input[name=consultationDate]') as HTMLInputElement)?.showPicker?.()} className="absolute right-2 top-2 p-1 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                    <CalendarIcon className="h-5 w-5 text-gray-500" />
+                  </button>
                 </div>
                 {errors.consultationDate && (
                   <p className="mt-1 text-sm text-red-600 flex items-center">
@@ -274,6 +312,56 @@ const ConsultationFormModal: React.FC<ConsultationFormModalProps> = ({
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
+              </div>
+              {/* Follow-up Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Follow-up Date
+                </label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    name="followUpDate"
+                    value={formData.followUpDate}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                    onClick={(e) => (e.currentTarget as HTMLInputElement).showPicker?.()}
+                  />
+                  <button type="button" onClick={() => (document.querySelector('input[name=followUpDate]') as HTMLInputElement)?.showPicker?.()} className="absolute right-2 top-2 p-1 rounded hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500">
+                    <CalendarIcon className="h-5 w-5 text-gray-500" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Vitals and Measurements */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Weight (kg)</label>
+                <input type="number" name="weightKg" value={formData.weightKg as any} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors" step="0.1" min="0" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Height (cm)</label>
+                <input type="number" name="heightCm" value={formData.heightCm as any} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors" step="0.1" min="0" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Temperature (°C)</label>
+                <input type="number" name="temperatureC" value={formData.temperatureC as any} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors" step="0.1" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Pulse (bpm)</label>
+                <input type="number" name="pulseBpm" value={formData.pulseBpm as any} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Respiration (rpm)</label>
+                <input type="number" name="respirationRate" value={formData.respirationRate as any} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Blood Pressure (mmHg)</label>
+                <div className="flex gap-2">
+                  <input type="number" name="bpSystolic" value={formData.bpSystolic as any} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors" placeholder="Systolic" />
+                  <input type="number" name="bpDiastolic" value={formData.bpDiastolic as any} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors" placeholder="Diastolic" />
+                </div>
               </div>
             </div>
 

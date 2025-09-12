@@ -13,6 +13,7 @@ import SetupPage from './pages/SetupPage';
 import Dashboard from './pages/Dashboard';
 import HospitalsPage from './pages/HospitalsPage';
 import PatientsPage from './pages/PatientsPage';
+import PatientDetailPage from './pages/PatientDetailPage.tsx';
 import UsersPage from './pages/UsersPage';
 import ConsultationsPage from './pages/ConsultationsPage';
 import TasksPage from './pages/TasksPage';
@@ -86,6 +87,7 @@ const AppContent: React.FC = () => {
                     } 
                   />
                   <Route path="/patients" element={<PatientsPage />} />
+                  <Route path="/patients/:id" element={<PatientDetailPage />} />
                   <Route 
                     path="/users" 
                     element={

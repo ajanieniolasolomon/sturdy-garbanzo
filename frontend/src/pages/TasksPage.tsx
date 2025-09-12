@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/redux';
 import { addNotification } from '../store/slices/uiSlice';
 import firebaseService from '../services/firebaseService';
@@ -20,6 +21,9 @@ const TasksPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const dueFilter = params.get('due');
 
   const fetchTasks = async () => {
     try {
@@ -87,7 +91,19 @@ const TasksPage: React.FC = () => {
     task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
     task.assignedToName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  ).filter(task => !dueFilter || (task.dueDate || '').toString().split('T')[0] === dueFilter);
+
+  // Emphasize upcoming follow-ups; hide completed follow-ups by default
+  const sortedTasks = filteredTasks
+    .filter(t => !(t.title || '').toLowerCase().startsWith('follow-up:') || t.status !== 'completed')
+    .sort((a, b) => {
+      const aIsFollow = (a.title || '').toLowerCase().startsWith('follow-up:') ? 1 : 0;
+      const bIsFollow = (b.title || '').toLowerCase().startsWith('follow-up:') ? 1 : 0;
+      if (aIsFollow !== bIsFollow) return bIsFollow - aIsFollow;
+      const ad = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const bd = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return ad - bd;
+    });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -224,10 +240,10 @@ const TasksPage: React.FC = () => {
         <div className="bg-white/90 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/30 overflow-hidden animate-scale-in" style={{animationDelay: '0.4s'}}>
           <div className="px-8 py-6 border-b border-gray-200/50 bg-gradient-to-r from-gray-50 to-gray-100">
             <h3 className="text-xl font-bold text-gray-900">Task Board</h3>
-            <p className="text-sm text-gray-600 mt-1">{filteredTasks.length} tasks found</p>
+            <p className="text-sm text-gray-600 mt-1">{sortedTasks.length} tasks found</p>
           </div>
           <div className="divide-y divide-gray-100">
-            {filteredTasks.map((task, index) => (
+            {sortedTasks.map((task, index) => (
               <div key={task.id} className="group hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 transition-all duration-300 px-8 py-6 animate-slide-up" style={{animationDelay: `${index * 0.06}s`}}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">

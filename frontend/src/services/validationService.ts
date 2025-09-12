@@ -214,7 +214,15 @@ class ValidationService {
       patientId: { required: true },
       consultationType: { required: true },
       chiefComplaint: { required: true, minLength: 5, maxLength: 500 },
-      consultationDate: { required: true }
+      consultationDate: { required: true },
+      // optional but validated numeric ranges
+      weightKg: { custom: (v: any) => (v !== '' && v != null && Number(v) < 0 ? 'Invalid weight' : null) },
+      heightCm: { custom: (v: any) => (v !== '' && v != null && Number(v) < 0 ? 'Invalid height' : null) },
+      temperatureC: { custom: (v: any) => (v !== '' && v != null && (Number(v) < 25 || Number(v) > 45) ? 'Unrealistic temperature' : null) },
+      pulseBpm: { custom: (v: any) => (v !== '' && v != null && (Number(v) < 20 || Number(v) > 250) ? 'Unrealistic pulse' : null) },
+      respirationRate: { custom: (v: any) => (v !== '' && v != null && (Number(v) < 5 || Number(v) > 80) ? 'Unrealistic respiration' : null) },
+      bpSystolic: { custom: (v: any) => (v !== '' && v != null && (Number(v) < 50 || Number(v) > 300) ? 'Unrealistic systolic' : null) },
+      bpDiastolic: { custom: (v: any) => (v !== '' && v != null && (Number(v) < 30 || Number(v) > 200) ? 'Unrealistic diastolic' : null) },
     };
   }
 

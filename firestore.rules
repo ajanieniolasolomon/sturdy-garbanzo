@@ -39,9 +39,13 @@ service cloud.firestore {
     // CONSULTATIONS COLLECTION
     // ==============================
     match /consultations/{consultationId} {
-      allow read, write: if isSuperAdmin()
+      allow read: if isSuperAdmin()
         || (isAdmin() && isSameHospital(resource.data.hospitalId))
         || (isHCW() && isSameHospital(resource.data.hospitalId));
+
+      allow create, update: if (
+        isSuperAdmin() || (isAdmin() && isSameHospital(request.resource.data.hospitalId)) || (isHCW() && isSameHospital(request.resource.data.hospitalId))
+      ) && validConsultation(request.resource.data);
     }
 
     // ==============================
@@ -76,6 +80,27 @@ service cloud.firestore {
     // ✅ User can only read/write their own profile
     function isSameUser(userId) {
       return request.auth != null && request.auth.uid == userId;
+    }
+
+    // ==============================
+    // VALIDATION HELPERS
+    // ==============================
+    function isNumberInRange(n, min, max) {
+      return n == null || (n is number && n >= min && n <= max);
+    }
+
+    function validConsultation(data) {
+      // Optional vitals/measurements must be realistic when provided
+      return
+        isNumberInRange(data.weightKg, 0, 500) &&
+        isNumberInRange(data.heightCm, 0, 300) &&
+        (data.vitals == null || (
+          isNumberInRange(data.vitals.temperatureC, 25, 45) &&
+          isNumberInRange(data.vitals.pulseBpm, 20, 250) &&
+          isNumberInRange(data.vitals.respirationRate, 5, 80) &&
+          isNumberInRange(data.vitals.bpSystolic, 50, 300) &&
+          isNumberInRange(data.vitals.bpDiastolic, 30, 200)
+        ));
     }
   }
 }
