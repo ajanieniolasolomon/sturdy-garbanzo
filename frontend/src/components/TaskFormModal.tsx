@@ -71,7 +71,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
 
   const loadPatients = async () => {
     try {
-      const result = await firebaseService.getPatients(user?.hospitalId, undefined);
+      const result = await firebaseService.getPatients();
       setPatients(result.data);
     } catch (error) {
       console.error('Error loading patients for task modal:', error);
@@ -95,6 +95,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
     e.preventDefault();
     
     // Validate form
+  if(!editingTask) {
     const validation = validationService.validateForm(
       formData,
       validationService.getTaskValidationRules()
@@ -104,6 +105,8 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
       setErrors(validation.errors);
       return;
     }
+  }
+
 
     try {
       setLoading(true);
@@ -111,6 +114,7 @@ const TaskFormModal: React.FC<TaskFormModalProps> = ({
       const assignedUser = users.find(u => u.id === formData.assignedTo);
       
       if (editingTask) {
+        console.log('🔴 Updating task:', editingTask.id);
         const assignedUser = users.find(u => u.id === formData.assignedTo);
         await firebaseService.updateTask(editingTask.id, {
           ...formData,

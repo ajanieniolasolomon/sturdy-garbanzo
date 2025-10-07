@@ -47,15 +47,17 @@ export interface Patient {
   state?: string;
   country: string;
   nationality: 'Nigerian' | 'Refugee' | 'Others';
-  notes?: string;
-  status: 'new_case' | 'transferred_in' | 'transferred_out' | 'loss_to_follow_up' | 'dead' | 'stopped' | 'on_treatment';
+  note?: string;
+  notes?: string; // Keep for backward compatibility
+  status: 'new_case' | 'transferred_in' | 'transferred_out' | 'loss_to_follow_up' | 'dead' | 'stopped' | 'on_treatment' | 'On Treatment';
   assignedHCW?: string;
   emergencyContact?: string;
   medicalHistory?: string;
   allergies?: string;
   currentMedications?: string;
   hospitalId: string;
-  isActive: boolean;
+  patient_local_id?: string;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -156,13 +158,15 @@ export interface PatientForm {
   state?: string;
   country: string;
   nationality: 'Nigerian' | 'Refugee' | 'Others';
-  notes?: string;
-  status: 'new_case' | 'transferred_in' | 'transferred_out' | 'loss_to_follow_up' | 'dead' | 'stopped' | 'on_treatment';
+  note?: string;
+  notes?: string; // Keep for backward compatibility
+  status: 'new_case' | 'transferred_in' | 'transferred_out' | 'loss_to_follow_up' | 'dead' | 'stopped' | 'on_treatment' | 'On Treatment';
   assignedHCW?: string;
   emergencyContact?: string;
   medicalHistory?: string;
   allergies?: string;
   currentMedications?: string;
+  patient_local_id?: string;
 }
 
 export interface UserForm {

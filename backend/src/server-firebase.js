@@ -633,7 +633,7 @@ const startServer = async () => {
       console.log('Healthcare Worker: nelson@ruralhealthcenter.ng / any password');
       console.log('\n=== FIREBASE FEATURES ===');
       console.log('✅ Real-time Firestore database');
-      console.log('✅ Automatic offline sync');
+      console.log('✅ Real-time data synchronization');
       console.log('✅ Built-in authentication');
       console.log('✅ Global scaling');
       console.log('✅ Data export (CSV)');

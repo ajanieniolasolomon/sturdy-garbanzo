@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../hooks/redux';
 import { logoutUser } from '../store/slices/authSlice';
-import OfflineStatus from './OfflineStatus';
 import {
   HomeIcon,
   BuildingOfficeIcon,
@@ -207,8 +206,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </main>
       </div>
       
-      {/* Offline Status Indicator */}
-      <OfflineStatus />
     </div>
   );
 };

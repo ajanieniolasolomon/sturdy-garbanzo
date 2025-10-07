@@ -21,10 +21,10 @@ import Layout from './components/Layout';
 import NotificationContainer from './components/NotificationContainer';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
 
-// Auth wrapper component
-const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+// Auth initialization component
+const AuthInitializer: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const dispatch = useAppDispatch();
-  const { isAuthenticated, isLoading } = useAppSelector(state => state.auth);
+  const { isLoading } = useAppSelector(state => state.auth);
 
   useEffect(() => {
     const unsubscribe = firebaseService.onAuthStateChanged((user: User | null) => {
@@ -45,36 +45,29 @@ const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     );
   }
 
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
-
   return <>{children}</>;
 };
 
-// Protected route component
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAppSelector(state => state.auth);
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  return <>{children}</>;
-};
 
 // Main App component
 const AppContent: React.FC = () => {
+  const { isAuthenticated } = useAppSelector(state => state.auth);
+
   return (
     <Router>
       <NotificationContainer />
       <Routes>
         <Route path="/setup" element={<SetupPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/*"
+        <Route 
+          path="/login" 
           element={
-            <ProtectedRoute>
+            isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />
+          } 
+        />
+        {isAuthenticated ? (
+          <Route
+            path="/*"
+            element={
               <Layout>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
@@ -101,9 +94,11 @@ const AppContent: React.FC = () => {
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Layout>
-            </ProtectedRoute>
-          }
-        />
+            }
+          />
+        ) : (
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        )}
       </Routes>
     </Router>
   );
@@ -112,9 +107,9 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <Provider store={store}>
-      <AuthWrapper>
+      <AuthInitializer>
         <AppContent />
-      </AuthWrapper>
+      </AuthInitializer>
     </Provider>
   );
 };

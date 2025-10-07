@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppSelector, useAppDispatch } from '../hooks/redux';
 import { addNotification } from '../store/slices/uiSlice';
 import firebaseService from '../services/firebaseService';
-import validationService from '../services/validationService';
+// import validationService from '../services/validationService';
 import type { Patient, PatientForm, Hospital, User } from '../types';
 import {
   XMarkIcon,
@@ -31,6 +31,8 @@ const PatientFormModal: React.FC<PatientFormModalProps> = ({
   const [selectedHospitalId, setSelectedHospitalId] = useState<string>('');
   const [hcwUsers, setHcwUsers] = useState<User[]>([]);
 
+ 
+
   const [formData, setFormData] = useState<PatientForm>({
     fullName: '',
     ccNumber: '',
@@ -46,6 +48,8 @@ const PatientFormModal: React.FC<PatientFormModalProps> = ({
     country: 'Nigeria',
     nationality: 'Nigerian',
     status: 'new_case',
+    note: '',
+    patient_local_id: '',
   });
 
   useEffect(() => {
@@ -63,9 +67,11 @@ const PatientFormModal: React.FC<PatientFormModalProps> = ({
           allergies: editingPatient.allergies || '',
           currentMedications: editingPatient.currentMedications || '',
           assignedHCW: editingPatient.assignedHCW || '',
-          country: editingPatient.country,
+          country: editingPatient.country || 'Nigeria',
           nationality: editingPatient.nationality || 'Nigerian',
           status: editingPatient.status as any,
+          note: editingPatient.note || editingPatient.notes || '',
+          patient_local_id: editingPatient.patient_local_id || '',
         });
         setSelectedHospitalId(editingPatient.hospitalId);
       } else {
@@ -122,24 +128,27 @@ const PatientFormModal: React.FC<PatientFormModalProps> = ({
       country: 'Nigeria',
       nationality: 'Nigerian',
       status: 'new_case',
+      note: '',
+      patient_local_id: '',
     });
     setErrors({});
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+
     e.preventDefault();
     
     // Validate form
-    const validation = validationService.validateForm(
-      formData,
-      validationService.getPatientValidationRules()
-    );
+    // const validation = validationService.validateForm(
+    //   formData,
+    //   validationService.getPatientValidationRules()
+    // );
 
-    if (!validation.isValid) {
-      setErrors(validation.errors);
-      return;
-    }
-
+    // if (!validation.isValid) {
+    //   setErrors(validation.errors);
+    //   return;
+    // }
+    console.log('🔴 Submitting patient2:', formData);
     try {
       setLoading(true);
       
@@ -154,8 +163,12 @@ const PatientFormModal: React.FC<PatientFormModalProps> = ({
         const updateData = {
           ...patientData,
           hospitalId: selectedHospitalId || editingPatient.hospitalId || user?.hospitalId || '',
-        } as any;
-        await firebaseService.updatePatient(editingPatient.id, updateData, user?.id);
+        };
+        
+        // Add debugging log
+        console.log('🔴 Update data before sending:', updateData);
+        
+        await firebaseService.updatePatient(editingPatient.id, updateData);
         dispatch(addNotification({
           type: 'success',
           message: 'Patient updated successfully'
@@ -164,7 +177,7 @@ const PatientFormModal: React.FC<PatientFormModalProps> = ({
         await firebaseService.createPatient({
           ...patientData,
           hospitalId: selectedHospitalId || user?.hospitalId || '',
-        }, user?.id);
+        });
         dispatch(addNotification({
           type: 'success',
           message: 'Patient created successfully'
@@ -432,6 +445,7 @@ const PatientFormModal: React.FC<PatientFormModalProps> = ({
                   <option value="dead">Dead</option>
                   <option value="stopped">Stopped</option>
                   <option value="on_treatment">On Treatment</option>
+                  <option value="On Treatment">On Treatment (New)</option>
                 </select>
               </div>
             </div>
@@ -493,6 +507,36 @@ const PatientFormModal: React.FC<PatientFormModalProps> = ({
                 rows={2}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors resize-none"
                 placeholder="Enter current medications"
+              />
+            </div>
+
+            {/* Note */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Note
+              </label>
+              <textarea
+                name="note"
+                value={formData.note}
+                onChange={handleInputChange}
+                rows={3}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors resize-none"
+                placeholder="Enter additional notes about the patient"
+              />
+            </div>
+
+            {/* Patient Local ID */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Patient Local ID
+              </label>
+              <input
+                type="text"
+                name="patient_local_id"
+                value={formData.patient_local_id}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                placeholder="Enter patient local ID"
               />
             </div>
 

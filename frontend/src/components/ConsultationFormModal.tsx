@@ -80,7 +80,7 @@ const ConsultationFormModal: React.FC<ConsultationFormModalProps> = ({
   const loadData = async () => {
     try {
       const [patientsResult, usersResult] = await Promise.all([
-        firebaseService.getPatients(user?.hospitalId),
+        firebaseService.getPatients(),
         firebaseService.getUsers(user?.hospitalId)
       ]);
       setPatients(patientsResult.data);

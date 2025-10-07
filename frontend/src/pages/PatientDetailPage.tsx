@@ -19,7 +19,7 @@ const PatientDetailPage: React.FC = () => {
     const load = async () => {
       try {
         if (!id) return;
-        const p = await firebaseService.getPatients(undefined);
+        const p = await firebaseService.getPatients();
         const found = p.data.find(x => x.id === id) || null;
         setPatient(found);
         // stream related

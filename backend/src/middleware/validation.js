@@ -166,6 +166,23 @@ const validatePatient = [
     .isMongoId()
     .withMessage('Hospital ID must be a valid MongoDB ObjectId'),
   
+  body('note')
+    .optional()
+    .trim()
+    .isLength({ max: 1000 })
+    .withMessage('Note cannot exceed 1000 characters'),
+  
+  body('patient_local_id')
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('Patient local ID cannot exceed 100 characters'),
+  
+  body('status')
+    .optional()
+    .isIn(['new_case', 'on_treatment', 'dead', 'stopped', 'loss_to_follow_up', 'restarted', 'transferred_out', 'transferred_in', 'On Treatment'])
+    .withMessage('Status must be a valid status value'),
+  
   handleValidationErrors
 ];
 

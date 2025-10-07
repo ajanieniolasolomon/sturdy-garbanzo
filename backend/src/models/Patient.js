@@ -59,9 +59,19 @@ const patientSchema = new mongoose.Schema({
     trim: true,
     maxlength: [1000, 'Notes cannot exceed 1000 characters']
   },
+  note: {
+    type: String,
+    trim: true,
+    maxlength: [1000, 'Note cannot exceed 1000 characters']
+  },
+  patient_local_id: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Patient local ID cannot exceed 100 characters']
+  },
   status: {
     type: String,
-    enum: ['new_case', 'on_treatment', 'dead', 'stopped', 'loss_to_follow_up', 'restarted', 'transferred_out', 'transferred_in'],
+    enum: ['new_case', 'on_treatment', 'dead', 'stopped', 'loss_to_follow_up', 'restarted', 'transferred_out', 'transferred_in', 'On Treatment'],
     default: 'new_case'
   },
   assignedHCW: {

@@ -3,7 +3,6 @@ const { body, validationResult, query } = require('express-validator');
 const Patient = require('../models/Patient');
 const { logger } = require('../utils/logger');
 const { authenticateHospital } = require('../middleware/auth');
-  const { offlineAuth, hospitalAccess, requirePermission } = require('../middleware/offlineAuth');
 
 const router = express.Router();
 
@@ -20,12 +19,14 @@ const validatePatient = [
   body('state').trim().isLength({ min: 1, max: 50 }).withMessage('State is required and cannot exceed 50 characters'),
   body('country').isIn(['Nigeria', 'Refugee', 'Others']).withMessage('Country must be Nigeria, Refugee, or Others'),
   body('isActive').optional().isBoolean().withMessage('isActive must be a boolean'),
-  body('status').optional().isIn(['active', 'inactive', 'deceased', 'transferred', 'removed']).withMessage('Invalid status')
+  body('status').optional().isIn(['new_case', 'on_treatment', 'dead', 'stopped', 'loss_to_follow_up', 'restarted', 'transferred_out', 'transferred_in', 'On Treatment']).withMessage('Invalid status'),
+  body('note').optional().trim().isLength({ max: 1000 }).withMessage('Note cannot exceed 1000 characters'),
+  body('patient_local_id').optional().trim().isLength({ max: 100 }).withMessage('Patient local ID cannot exceed 100 characters')
 ];
 
 const validateSearch = [
   query('search').optional().trim().isLength({ min: 1 }).withMessage('Search term must not be empty'),
-  query('status').optional().isIn(['active', 'inactive', 'deceased', 'transferred', 'removed']).withMessage('Invalid status'),
+  query('status').optional().isIn(['new_case', 'on_treatment', 'dead', 'stopped', 'loss_to_follow_up', 'restarted', 'transferred_out', 'transferred_in', 'On Treatment']).withMessage('Invalid status'),
   query('country').optional().isIn(['Nigeria', 'Refugee', 'Others']).withMessage('Invalid country'),
   query('state').optional().trim().isLength({ min: 1 }).withMessage('State filter must not be empty'),
   query('lga').optional().trim().isLength({ min: 1 }).withMessage('LGA filter must not be empty'),

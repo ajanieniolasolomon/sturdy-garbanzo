@@ -29,7 +29,7 @@ export const logoutUser = createAsyncThunk(
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
-  isLoading: false,
+  isLoading: true, // Start as loading to wait for Firebase auth state
   error: null,
 };
 
@@ -40,6 +40,7 @@ const authSlice = createSlice({
     setUser: (state, action: PayloadAction<User | null>) => {
       state.user = action.payload;
       state.isAuthenticated = !!action.payload;
+      state.isLoading = false; // Stop loading once auth state is determined
     },
     clearError: (state) => {
       state.error = null;

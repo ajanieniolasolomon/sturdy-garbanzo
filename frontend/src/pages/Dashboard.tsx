@@ -46,7 +46,7 @@ const Dashboard: React.FC = () => {
       console.log('🔴 Loading dashboard data with API calls for user:', user?.role, user?.id);
       // Fetch without hospital constraints; apply the same UI filtering logic locally
       const [patients, users, consultations, tasks] = await Promise.all([
-        firebaseService.getPatients(user?.hospitalId, user?.role === 'HCW' ? user?.id : undefined),
+        firebaseService.getPatients(),
         (user?.role === 'HCW' ? Promise.resolve({ data: [], total: 0, success: true }) : firebaseService.getUsers(user?.hospitalId)),
         firebaseService.getConsultations(undefined, user?.hospitalId, user?.role === 'HCW' ? user?.id : undefined),
         firebaseService.getTasks(user?.hospitalId, user?.role === 'HCW' ? user?.id : undefined),

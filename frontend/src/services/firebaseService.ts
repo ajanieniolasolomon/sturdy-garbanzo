@@ -12,13 +12,12 @@ import {
   where,
   orderBy,
   getDocs,
+  setDoc,
+  updateDoc,
   serverTimestamp,
-  enableNetwork,
-  disableNetwork,
   onSnapshot
 } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
-import { offlineService } from './offlineService';
 import type {
   User,
   Hospital,
@@ -36,14 +35,10 @@ import type {
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 class FirebaseService {
-  private syncQueue: any[] = [];
   private listeners: { [key: string]: () => void } = {};
 
   constructor() {
-    // Listen for online/offline status
-    window.addEventListener('online', () => {
-      this.syncPendingChanges();
-    });
+    // Firebase service initialized
   }
 
   // Authentication methods
@@ -80,41 +75,46 @@ class FirebaseService {
 
   onAuthStateChanged(callback: (user: User | null) => void): () => void {
     return onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
-      if (firebaseUser) {
-        try {
-          // First, try to get the user document
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data() as User;
-            callback({ ...userData, id: firebaseUser.uid });
-          } else {
-            console.warn('User document not found for:', firebaseUser.email);
-            callback(null);
+      try {
+        if (firebaseUser) {
+          try {
+            // First, try to get the user document
+            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+            if (userDoc.exists()) {
+              const userData = userDoc.data() as User;
+              callback({ ...userData, id: firebaseUser.uid });
+            } else {
+              console.warn('User document not found for:', firebaseUser.email);
+              callback(null);
+            }
+          } catch (error: any) {
+            console.error('Auth state change error:', error);
+            // If there's a permissions error, it might be because claims aren't set up yet
+            // Let's try to create a basic user object from Firebase Auth data
+            if ((error as any).code === 'permission-denied' || (error as any).message?.includes('Missing or insufficient permissions')) {
+              console.warn('Permissions error - user may need claims setup. Creating basic user object.');
+              // Create a minimal user object from Firebase Auth data
+              const basicUser: User = {
+                id: firebaseUser.uid,
+                email: firebaseUser.email || '',
+                fullName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Unknown User',
+                username: firebaseUser.email?.split('@')[0] || 'unknown',
+                role: 'HCW', // Default role
+                hospitalId: undefined as string | undefined,
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              };
+              callback(basicUser);
+            } else {
+              callback(null);
+            }
           }
-        } catch (error: any) {
-          console.error('Auth state change error:', error);
-          // If there's a permissions error, it might be because claims aren't set up yet
-          // Let's try to create a basic user object from Firebase Auth data
-          if ((error as any).code === 'permission-denied' || (error as any).message?.includes('Missing or insufficient permissions')) {
-            console.warn('Permissions error - user may need claims setup. Creating basic user object.');
-            // Create a minimal user object from Firebase Auth data
-            const basicUser: User = {
-              id: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              fullName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Unknown User',
-              username: firebaseUser.email?.split('@')[0] || 'unknown',
-              role: 'HCW', // Default role
-              hospitalId: undefined as string | undefined,
-              isActive: true,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            };
-            callback(basicUser);
-          } else {
-            callback(null);
-          }
+        } else {
+          callback(null);
         }
-      } else {
+      } catch (error) {
+        console.error('Critical auth state change error:', error);
         callback(null);
       }
     });
@@ -164,7 +164,7 @@ class FirebaseService {
       
       const docRef = doc(collection(db, 'hospitals'));
       const docId = docRef.id;
-      await offlineService.createDocument('hospitals', docId, newHospital);
+      await setDoc(docRef, { ...newHospital, id: docId });
       
       return {
         id: docId,
@@ -180,7 +180,8 @@ class FirebaseService {
 
   async updateHospital(id: string, hospitalData: Partial<HospitalForm>): Promise<void> {
     try {
-      await offlineService.updateDocument('hospitals', id, {
+      const docRef = doc(db, 'hospitals', id);
+      await updateDoc(docRef, {
         ...hospitalData,
         updatedAt: serverTimestamp()
       });
@@ -192,7 +193,8 @@ class FirebaseService {
 
   async deleteHospital(id: string): Promise<void> {
     try {
-      await offlineService.updateDocument('hospitals', id, {
+      const docRef = doc(db, 'hospitals', id);
+      await updateDoc(docRef, {
         isActive: false,
         updatedAt: serverTimestamp()
       });
@@ -203,27 +205,26 @@ class FirebaseService {
   }
 
   // Patient methods
-  async getPatients(hospitalId?: string, assignedHCW?: string): Promise<ApiResponse<Patient>> {
+  async getPatients(): Promise<ApiResponse<Patient>> {
     try {
       let q = query(
         collection(db, 'patients'),
-        where('isActive', '==', true),
-        orderBy('createdAt', 'desc')
+  
       );
       
-      if (hospitalId) {
-        q = query(q, where('hospitalId', '==', hospitalId));
-      }
-      if (assignedHCW) {
-        q = query(q, where('assignedHCW', '==', assignedHCW));
-      }
+      // if (hospitalId) {
+      //   q = query(q, where('hospitalId', '==', hospitalId));
+      // }
+      // if (assignedHCW) {
+      //   q = query(q, where('assignedHCW', '==', assignedHCW));
+      // }
       
       const querySnapshot = await getDocs(q);
       const patients = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as Patient[];
-      
+      console.log(patients)
       return { data: patients, total: patients.length, success: true };
     } catch (error) {
       console.error('Get patients error:', error);
@@ -271,7 +272,7 @@ class FirebaseService {
     };
   }
 
-  async createPatient(patientData: PatientForm & { hospitalId: string }, userId?: string) {
+  async createPatient(patientData: PatientForm & { hospitalId: string }) {
 
   //  console.log("Creating patient with data:", patientData, "by user:", userId);
     try {
@@ -286,8 +287,7 @@ class FirebaseService {
       const docRef = doc(collection(db, 'patients'));
       const docId = docRef.id;
       
-      // Use offline service for offline-aware creation with user context
-      await offlineService.createDocument('patients', docId, newPatient, userId);
+      await setDoc(docRef, { ...newPatient, id: docId });
       
       return {
         id: docId,
@@ -301,26 +301,45 @@ class FirebaseService {
     }
   }
 
-  async updatePatient(id: string, patientData: Partial<PatientForm>, userId?: string): Promise<void> {
+  async updatePatient(id: string, patientData: Partial<PatientForm>): Promise<void> {
+    console.log('🔴 Updating patient:', id);
     try {
-      // Use offline service for offline-aware updates with user context
-      await offlineService.updateDocument('patients', id, {
-        ...patientData,
-        updatedAt: serverTimestamp()
-      }, userId);
+      // Clean the data by removing undefined, null, and empty string values
+      const cleanedData: Record<string, any> = {};
+      
+      Object.entries(patientData).forEach(([key, value]) => {
+        // Keep values that are not undefined, null, or empty strings
+        // But allow 0 and false as valid values
+        if (value !== undefined && value !== null) {
+          // For strings, exclude empty strings, but allow 0 and false
+          if (typeof value === 'string' && value === '') {
+            // Skip empty strings
+            return;
+          }
+          cleanedData[key] = value;
+        }
+      });
+
+      // Add updatedAt timestamp
+      cleanedData.updatedAt = serverTimestamp();
+
+      console.log('🔵 Cleaned update data:', cleanedData);
+
+      const docRef = doc(db, 'patients', id);
+      await updateDoc(docRef, cleanedData);
     } catch (error) {
       console.error('Update patient error:', error);
       throw error;
     }
   }
 
-  async deletePatient(id: string, userId?: string): Promise<void> {
+  async deletePatient(id: string): Promise<void> {
     try {
-      // Use offline service for offline-aware soft delete with user context
-      await offlineService.updateDocument('patients', id, {
+      const docRef = doc(db, 'patients', id);
+      await updateDoc(docRef, {
         isActive: false,
         updatedAt: serverTimestamp()
-      }, userId);
+      });
     } catch (error) {
       console.error('Delete patient error:', error);
       throw error;
@@ -390,7 +409,8 @@ class FirebaseService {
 
   async updateUser(id: string, userData: Partial<UserForm>): Promise<void> {
     try {
-      await offlineService.updateDocument('users', id, {
+      const docRef = doc(db, 'users', id);
+      await updateDoc(docRef, {
         ...userData,
         updatedAt: serverTimestamp()
       });
@@ -402,7 +422,8 @@ class FirebaseService {
 
   async deleteUser(id: string): Promise<void> {
     try {
-      await offlineService.updateDocument('users', id, {
+      const docRef = doc(db, 'users', id);
+      await updateDoc(docRef, {
         isActive: false,
         updatedAt: serverTimestamp()
       });
@@ -494,7 +515,7 @@ class FirebaseService {
     hcwId: string; 
     hcwName: string; 
     hospitalId: string; 
-  }, userId?: string): Promise<Consultation> {
+  }): Promise<Consultation> {
     try {
       const vitals = {
         temperatureC: (consultationData as any).temperatureC !== '' ? Number((consultationData as any).temperatureC) : undefined,
@@ -517,7 +538,7 @@ class FirebaseService {
       
       const docRef = doc(collection(db, 'consultations'));
       const docId = docRef.id;
-      await offlineService.createDocument('consultations', docId, newConsultation, userId);
+      await setDoc(docRef, { ...newConsultation, id: docId });
       
       // Auto-create a follow-up task if followUpDate provided
       if ((consultationData as any).followUpDate) {
@@ -537,13 +558,13 @@ class FirebaseService {
           updatedAt: serverTimestamp() as any,
         };
         const taskRef = doc(collection(db, 'tasks'));
-        await offlineService.createDocument('tasks', taskRef.id, followupTask, userId);
+        await setDoc(taskRef, { ...followupTask, id: taskRef.id });
       }
 
       // If patient seen today, auto-complete any follow-up task due today
       try {
         const today = new Date(consultationData.consultationDate).toISOString().split('T')[0];
-        await this.completeFollowupTasksForDate(consultationData.patientId, consultationData.hospitalId, today, userId);
+        await this.completeFollowupTasksForDate(consultationData.patientId, consultationData.hospitalId, today);
       } catch (_) {}
 
       return {
@@ -558,7 +579,7 @@ class FirebaseService {
     }
   }
 
-  async updateConsultation(id: string, consultationData: Partial<ConsultationForm>, userId?: string): Promise<void> {
+  async updateConsultation(id: string, consultationData: Partial<ConsultationForm>): Promise<void> {
     try {
       const vitals = {
         temperatureC: (consultationData as any).temperatureC !== '' ? Number((consultationData as any).temperatureC) : undefined,
@@ -576,11 +597,12 @@ class FirebaseService {
         ...(heightCm !== undefined ? { heightCm } : {}),
         updatedAt: serverTimestamp()
       };
-      await offlineService.updateDocument('consultations', id, payload, userId);
+      const docRef = doc(db, 'consultations', id);
+      await updateDoc(docRef, payload);
       // If consultationDate is provided/changed, complete follow-up tasks for that date
       if ((consultationData as any).consultationDate && (consultationData as any).patientId && (consultationData as any).hospitalId) {
         const dateStr = new Date((consultationData as any).consultationDate).toISOString().split('T')[0];
-        await this.completeFollowupTasksForDate((consultationData as any).patientId, (consultationData as any).hospitalId, dateStr, userId);
+        await this.completeFollowupTasksForDate((consultationData as any).patientId, (consultationData as any).hospitalId, dateStr);
       }
     } catch (error) {
       console.error('Update consultation error:', error);
@@ -588,7 +610,7 @@ class FirebaseService {
     }
   }
 
-  private async completeFollowupTasksForDate(patientId: string, hospitalId: string, dateYYYYMMDD: string, userId?: string): Promise<void> {
+  private async completeFollowupTasksForDate(patientId: string, hospitalId: string, dateYYYYMMDD: string): Promise<void> {
     try {
       // Query tasks for patient and due date
       const qRef = query(
@@ -603,19 +625,21 @@ class FirebaseService {
         .map(d => ({ id: d.id, ...d.data() } as any))
         .filter(t => (t.dueDate || '').toString().split('T')[0] === dateYYYYMMDD);
       for (const t of toComplete) {
-        await offlineService.updateDocument('tasks', t.id, { status: 'completed', updatedAt: serverTimestamp() as any }, userId);
+        const taskDocRef = doc(db, 'tasks', t.id);
+        await updateDoc(taskDocRef, { status: 'completed', updatedAt: serverTimestamp() });
       }
     } catch (e) {
       console.warn('Auto-complete follow-up tasks failed:', e);
     }
   }
 
-  async deleteConsultation(id: string, userId?: string): Promise<void> {
+  async deleteConsultation(id: string): Promise<void> {
     try {
-      await offlineService.updateDocument('consultations', id, {
+      const docRef = doc(db, 'consultations', id);
+      await updateDoc(docRef, {
         isActive: false,
         updatedAt: serverTimestamp()
-      }, userId);
+      });
     } catch (error) {
       console.error('Delete consultation error:', error);
       throw error;
@@ -648,7 +672,7 @@ class FirebaseService {
         id: doc.id,
         ...doc.data()
       })) as Task[];
-      
+      console.log('tasks', tasks);
       return { data: tasks, total: tasks.length, success: true };
     } catch (error) {
       console.error('Get tasks error:', error);
@@ -709,7 +733,7 @@ class FirebaseService {
     assignedToName: string; 
     hospitalId: string; 
     patientName?: string; 
-  }, userId?: string): Promise<Task> {
+  }): Promise<Task> {
     try {
       const newTask: Omit<Task, 'id'> = {
         ...taskData,
@@ -721,7 +745,7 @@ class FirebaseService {
       
       const docRef = doc(collection(db, 'tasks'));
       const docId = docRef.id;
-      await offlineService.createDocument('tasks', docId, newTask, userId);
+      await setDoc(docRef, { ...newTask, id: docId });
       
       return {
         id: docId,
@@ -735,50 +759,34 @@ class FirebaseService {
     }
   }
 
-  async updateTask(id: string, taskData: Partial<TaskForm & { assignedToName?: string }>, userId?: string): Promise<void> {
+  async updateTask(id: string, taskData: Partial<TaskForm & { assignedToName?: string }>): Promise<void> {
+    console.log('🔴 Updating task:', id);
+    console.log('🔵 Task data:', taskData);
     try {
-      await offlineService.updateDocument('tasks', id, {
+      const docRef = doc(db, 'tasks', id);
+      await updateDoc(docRef, {
         ...taskData,
         updatedAt: serverTimestamp()
-      }, userId);
+      });
     } catch (error) {
       console.error('Update task error:', error);
       throw error;
     }
   }
 
-  async deleteTask(id: string, userId?: string): Promise<void> {
+  async deleteTask(id: string): Promise<void> {
     try {
-      await offlineService.updateDocument('tasks', id, {
+      const docRef = doc(db, 'tasks', id);
+      await updateDoc(docRef, {
         isActive: false,
         updatedAt: serverTimestamp()
-      }, userId);
+      });
     } catch (error) {
       console.error('Delete task error:', error);
       throw error;
     }
   }
 
-  // Offline/Online management
-  async enableOfflineMode(): Promise<void> {
-    await disableNetwork(db);
-  }
-
-  async enableOnlineMode(): Promise<void> {
-    await enableNetwork(db);
-    await this.syncPendingChanges();
-  }
-
-  private async syncPendingChanges(): Promise<void> {
-    if (this.syncQueue.length === 0) return;
-    
-    try {
-      // Process sync queue
-      this.syncQueue = [];
-    } catch (error) {
-      console.error('Sync error:', error);
-    }
-  }
 
   // Cleanup
   cleanup(): void {

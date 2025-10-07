@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppSelector, useAppDispatch } from '../hooks/redux';
 import { addNotification } from '../store/slices/uiSlice';
 import firebaseService from '../services/firebaseService';
@@ -13,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 const PatientsPage: React.FC = () => {
+  const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector(state => state.auth);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -29,7 +31,7 @@ const PatientsPage: React.FC = () => {
     const loadPatients = async () => {
       try {
         console.log('🔴 Loading patients for user:', user?.role, user?.id);
-        const result = await firebaseService.getPatients(user?.hospitalId, user?.role === 'HCW' ? user?.id : undefined);
+        const result = await firebaseService.getPatients();
         setPatients(result.data);
         setLoading(false);
       } catch (error) {
@@ -70,7 +72,7 @@ const PatientsPage: React.FC = () => {
   const loadPatients = async () => {
     try {
       setLoading(true);
-      const result = await firebaseService.getPatients(user?.hospitalId, user?.role === 'HCW' ? user?.id : undefined);
+      const result = await firebaseService.getPatients();
       setPatients(result.data);
     } catch (error) {
       console.error('Error loading patients:', error);
@@ -297,7 +299,7 @@ const PatientsPage: React.FC = () => {
         ) : (
           <div className="grid gap-6">
             {filteredPatients.map((patient) => (
-              <div key={patient.id} className="group relative bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 border border-white/20 cursor-pointer" onClick={() => window.location.assign(`/patients/${patient.id}`)}>
+              <div key={patient.id} className="group relative bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 border border-white/20 cursor-pointer" onClick={() => navigate(`/patients/${patient.id}`)}>
                 <div className="p-6">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -307,7 +309,7 @@ const PatientsPage: React.FC = () => {
                         </div>
                         <div>
                           <h3 className="text-lg font-semibold text-gray-900 group-hover:text-primary-600 transition-colors">
-                            {patient.fullName}
+                            {patient.fullName} {patient.id}
                           </h3>
                           <p className="text-sm text-gray-600">CC: {patient.ccNumber}</p>
                         </div>
@@ -328,6 +330,7 @@ const PatientsPage: React.FC = () => {
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                             patient.status === 'new_case' ? 'bg-blue-100 text-blue-800' :
                             patient.status === 'on_treatment' ? 'bg-yellow-100 text-yellow-800' :
+                            patient.status === 'On Treatment' ? 'bg-green-100 text-green-800' :
                             patient.status === 'transferred_in' ? 'bg-emerald-100 text-emerald-800' :
                             patient.status === 'transferred_out' ? 'bg-purple-100 text-purple-800' :
                             patient.status === 'loss_to_follow_up' ? 'bg-orange-100 text-orange-800' :
@@ -349,17 +352,35 @@ const PatientsPage: React.FC = () => {
                         <p className="text-sm font-medium text-gray-500">Assigned HCW</p>
                         <p className="text-sm text-gray-900">{getHcwName(patient.assignedHCW || '')}</p>
                       </div>
+                      {(patient.note || patient.notes) && (
+                        <div className="mt-3">
+                          <p className="text-sm font-medium text-gray-500">Note</p>
+                          <p className="text-sm text-gray-900">{patient.note || patient.notes}</p>
+                        </div>
+                      )}
+                      {patient.patient_local_id && (
+                        <div className="mt-3">
+                          <p className="text-sm font-medium text-gray-500">Patient Local ID</p>
+                          <p className="text-sm text-gray-900">{patient.patient_local_id}</p>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center space-x-3">
                       <button 
-                        onClick={() => handleEdit(patient)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(patient);
+                        }}
                         className="p-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 hover:text-blue-700 transition-all duration-200 transform hover:scale-110" 
                         title="Edit patient"
                       >
                         <PencilIcon className="h-5 w-5" />
                       </button>
                       <button 
-                        onClick={() => handleDelete(patient)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(patient);
+                        }}
                         className="p-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 transition-all duration-200 transform hover:scale-110" 
                         title="Delete patient"
                       >
